@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.exe
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Test files
+*_test.go
+coverage.out
+coverage.html
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Environment files
+.env
+.env.*
+
+# Dependencies (downloaded in container)
+vendor/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Development tools
+Makefile
+.golangci.yml
+
+# Deployment
+deploy/

@@ -1,0 +1,44 @@
+# e-cmdb-service 本地/独立部署编排
+# 启动: docker compose -f deploy/docker-compose.yml up -d
+#
+# 说明：生产环境通常复用 e-cam-service 的 MongoDB（共用 ecam 库，数据零迁移），
+# 此处的 mongodb 服务仅供本服务独立联调时使用。
+services:
+  e-cmdb-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: e-cmdb-service:0.1.0
+    container_name: e-cmdb-service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../config:/app/config:ro
+    depends_on:
+      - mongodb
+    networks:
+      - e-cmdb-network
+
+  mongodb:
+    image: mongo:7.0
+    container_name: e-cmdb-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: ecam
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - e-cmdb-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  e-cmdb-network:
+    driver: bridge
