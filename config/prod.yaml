@@ -1,0 +1,16 @@
+e-cmdb-service:
+  port: "8002"
+
+# 日志配置
+logger:
+  default:
+    level: "info"
+
+# MongoDB 配置
+# 与 e-cam-service 共用同一库 ecam，CMDB 集合（ecam_instance / ecam_model 等）
+# 不变，拆分后数据零迁移。
+mongodb:
+  dsn: mongodb://106.52.187.69:27017/ecam?authSource=admin
+  db: ecam
+  username: ecmdb
+  password: 123456
