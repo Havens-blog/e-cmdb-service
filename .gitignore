@@ -15,3 +15,6 @@
 
 # 本地环境
 *.local.yaml
+
+# 生产/环境配置（含凭据），不提交；本地开发用 prod.local.yaml 覆盖
+config/prod.yaml
