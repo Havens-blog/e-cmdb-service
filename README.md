@@ -32,6 +32,40 @@ docker compose -f deploy/docker-compose.yml up -d
 
 默认监听 `:8002`。健康检查：`GET /api/v1/cmdb/health`。
 
+## 造数（seed）
+
+为 dev MongoDB 里**已存在的模型（Model）**批量生成示例实例（Instance），解决「模型有、实例空」导致 E2E 走不通的问题。
+
+```bash
+# 预览（只读，不写库）
+go run . seed -f config/prod.yaml --dry-run
+
+# 正式造数：每个模型生成 3 条示例实例
+go run . seed -f config/prod.yaml
+
+# 指定租户/云账号/数量
+go run . seed -f config/prod.yaml --tenant-id 1 --account-id 1 --per-model 3
+```
+
+可用参数：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `-f, --config-file` | `config/prod.yaml` | 复用现有配置加载，mongodb 段读取 dsn/db/username/password |
+| `--tenant-id` | `1` | 实例所属租户ID（`Instance.Validate` 要求非 0） |
+| `--account-id` | `1` | 实例所属云账号ID |
+| `--per-model` | `3` | 每个模型生成的示例实例数量 |
+| `--asset-prefix` | `seed` | AssetID 前缀（幂等键的一部分，与真实同步数据隔离） |
+| `--dry-run` | `false` | 只读取并预览，不写库 |
+
+行为与影响：
+
+- 连接的库：`config/prod.yaml` 的 `mongodb` 段指向的库（当前为 `ecam`）。
+- 只写 `ecam_instance` 集合，**不修改** `ecam_model` / `ecam_attribute` / 关系等其它集合。
+- 实例与模型的关联字段是 `Instance.ModelUID`（对应 `Model.UID`）。
+- 幂等：AssetID 使用确定性前缀 `seed-<modelUID>-<序号>`，写入前先按 `tenant_id + model_uid + asset_id` 查询，已存在则跳过，可安全重复执行。
+- 生成的 `attributes` 动态属性按资源类型填充合理示例值，统一带 `provider` / `region` / `status` 三个通用键（与实例列表过滤、按厂商统计口径一致）。
+
 ## 配置
 
 `config/prod.yaml`：
