@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/Havens-blog/e-cmdb-service/cmd/fixidgen"
 	"github.com/Havens-blog/e-cmdb-service/cmd/seed"
 	"github.com/Havens-blog/e-cmdb-service/cmd/start"
 	"github.com/spf13/cobra"
@@ -31,6 +32,7 @@ func Execute(version string) {
 	cobra.OnInitialize(initViper)
 	rootCmd.AddCommand(start.Cmd)
 	rootCmd.AddCommand(seed.Cmd)
+	rootCmd.AddCommand(fixidgen.Cmd)
 	cobra.CheckErr(rootCmd.Execute())
 }
 
