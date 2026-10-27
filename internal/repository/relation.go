@@ -13,11 +13,11 @@ import (
 type InstanceRelationRepository interface {
 	Create(ctx context.Context, relation domain.InstanceRelation) (int64, error)
 	CreateBatch(ctx context.Context, relations []domain.InstanceRelation) (int64, error)
-	GetByID(ctx context.Context, id int64) (domain.InstanceRelation, error)
+	GetByID(ctx context.Context, tenantID int64, id int64) (domain.InstanceRelation, error)
 	List(ctx context.Context, filter domain.InstanceRelationFilter) ([]domain.InstanceRelation, error)
 	Count(ctx context.Context, filter domain.InstanceRelationFilter) (int64, error)
-	Delete(ctx context.Context, id int64) error
-	DeleteByInstanceID(ctx context.Context, instanceID int64) error
+	Delete(ctx context.Context, tenantID int64, id int64) error
+	DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error
 	Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error)
 }
 
@@ -42,8 +42,8 @@ func (r *instanceRelationRepository) CreateBatch(ctx context.Context, relations 
 	return r.dao.CreateBatch(ctx, daoRelations)
 }
 
-func (r *instanceRelationRepository) GetByID(ctx context.Context, id int64) (domain.InstanceRelation, error) {
-	daoRelation, err := r.dao.GetByID(ctx, id)
+func (r *instanceRelationRepository) GetByID(ctx context.Context, tenantID int64, id int64) (domain.InstanceRelation, error) {
+	daoRelation, err := r.dao.GetByID(ctx, tenantID, id)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return domain.InstanceRelation{}, nil
@@ -70,12 +70,12 @@ func (r *instanceRelationRepository) Count(ctx context.Context, filter domain.In
 	return r.dao.Count(ctx, r.toDAOFilter(filter))
 }
 
-func (r *instanceRelationRepository) Delete(ctx context.Context, id int64) error {
-	return r.dao.Delete(ctx, id)
+func (r *instanceRelationRepository) Delete(ctx context.Context, tenantID int64, id int64) error {
+	return r.dao.Delete(ctx, tenantID, id)
 }
 
-func (r *instanceRelationRepository) DeleteByInstanceID(ctx context.Context, instanceID int64) error {
-	return r.dao.DeleteByInstanceID(ctx, instanceID)
+func (r *instanceRelationRepository) DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error {
+	return r.dao.DeleteByInstanceID(ctx, tenantID, instanceID)
 }
 
 func (r *instanceRelationRepository) Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error) {

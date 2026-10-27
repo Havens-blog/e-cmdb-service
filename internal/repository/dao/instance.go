@@ -1,4 +1,4 @@
-﻿package dao
+package dao
 
 import (
 	"context"
@@ -60,13 +60,13 @@ type ProviderCount struct {
 type InstanceDAO interface {
 	Create(ctx context.Context, instance Instance) (int64, error)
 	CreateBatch(ctx context.Context, instances []Instance) (int64, error)
-	Update(ctx context.Context, instance Instance) error
-	GetByID(ctx context.Context, id int64) (Instance, error)
+	Update(ctx context.Context, tenantID int64, instance Instance) error
+	GetByID(ctx context.Context, tenantID int64, id int64) (Instance, error)
 	GetByAssetID(ctx context.Context, tenantID int64, modelUID, assetID string) (Instance, error)
 	List(ctx context.Context, filter InstanceFilter) ([]Instance, error)
 	ListByIDs(ctx context.Context, ids []int64) ([]Instance, error)
 	Count(ctx context.Context, filter InstanceFilter) (int64, error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance Instance) error
 	// ListUnbound 查询未绑定到任何服务树节点的资产 (通过 $lookup 排除已有 binding 的)
@@ -135,15 +135,14 @@ func (d *instanceDAO) CreateBatch(ctx context.Context, instances []Instance) (in
 }
 
 // Update 更新实例
-func (d *instanceDAO) Update(ctx context.Context, instance Instance) error {
+func (d *instanceDAO) Update(ctx context.Context, tenantID int64, instance Instance) error {
 	now := time.Now().UnixMilli()
 
-	filter := bson.M{"id": instance.ID}
+	filter := bson.M{"id": instance.ID, "tenant_id": tenantID}
 	update := bson.M{"$set": bson.M{
 		"asset_name": instance.AssetName,
 		"model_uid":  instance.ModelUID,
 		"asset_id":   instance.AssetID,
-		"tenant_id":  instance.TenantID,
 		"account_id": instance.AccountID,
 		"attributes": instance.Attributes,
 		"utime":      now,
@@ -162,9 +161,9 @@ func (d *instanceDAO) Update(ctx context.Context, instance Instance) error {
 }
 
 // GetByID 根据ID获取实例
-func (d *instanceDAO) GetByID(ctx context.Context, id int64) (Instance, error) {
+func (d *instanceDAO) GetByID(ctx context.Context, tenantID int64, id int64) (Instance, error) {
 	var instance Instance
-	filter := bson.M{"id": id}
+	filter := bson.M{"id": id, "tenant_id": tenantID}
 
 	err := d.db.Collection(InstanceCollection).FindOne(ctx, filter).Decode(&instance)
 	return instance, err
@@ -229,10 +228,16 @@ func (d *instanceDAO) Count(ctx context.Context, filter InstanceFilter) (int64, 
 }
 
 // Delete 删除实例
-func (d *instanceDAO) Delete(ctx context.Context, id int64) error {
-	filter := bson.M{"id": id}
-	_, err := d.db.Collection(InstanceCollection).DeleteOne(ctx, filter)
-	return err
+func (d *instanceDAO) Delete(ctx context.Context, tenantID int64, id int64) error {
+	filter := bson.M{"id": id, "tenant_id": tenantID}
+	result, err := d.db.Collection(InstanceCollection).DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // DeleteByAccountID 删除指定云账号的所有实例

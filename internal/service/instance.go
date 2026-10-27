@@ -14,12 +14,12 @@ import (
 type InstanceService interface {
 	Create(ctx context.Context, instance domain.Instance) (int64, error)
 	CreateBatch(ctx context.Context, instances []domain.Instance) (int64, error)
-	Update(ctx context.Context, instance domain.Instance) error
-	GetByID(ctx context.Context, id int64) (domain.Instance, error)
+	Update(ctx context.Context, tenantID int64, instance domain.Instance) error
+	GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error)
 	GetByAssetID(ctx context.Context, tenantID int64, modelUID, assetID string) (domain.Instance, error)
 	List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, int64, error)
 	ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance domain.Instance) error
 	UpsertBatch(ctx context.Context, instances []domain.Instance) error
@@ -68,16 +68,16 @@ func (s *instanceService) CreateBatch(ctx context.Context, instances []domain.In
 	return s.repo.CreateBatch(ctx, instances)
 }
 
-func (s *instanceService) Update(ctx context.Context, instance domain.Instance) error {
+func (s *instanceService) Update(ctx context.Context, tenantID int64, instance domain.Instance) error {
 	if instance.ID == 0 {
 		return errs.ErrInstanceNotFound
 	}
 
-	return s.repo.Update(ctx, instance)
+	return s.repo.Update(ctx, tenantID, instance)
 }
 
-func (s *instanceService) GetByID(ctx context.Context, id int64) (domain.Instance, error) {
-	instance, err := s.repo.GetByID(ctx, id)
+func (s *instanceService) GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error) {
+	instance, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return domain.Instance{}, fmt.Errorf("failed to get instance: %w", err)
 	}
@@ -112,8 +112,8 @@ func (s *instanceService) List(ctx context.Context, filter domain.InstanceFilter
 	return instances, total, nil
 }
 
-func (s *instanceService) Delete(ctx context.Context, id int64) error {
-	existing, err := s.repo.GetByID(ctx, id)
+func (s *instanceService) Delete(ctx context.Context, tenantID int64, id int64) error {
+	existing, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return fmt.Errorf("failed to get instance: %w", err)
 	}
@@ -121,7 +121,7 @@ func (s *instanceService) Delete(ctx context.Context, id int64) error {
 		return errs.ErrInstanceNotFound
 	}
 
-	return s.repo.Delete(ctx, id)
+	return s.repo.Delete(ctx, tenantID, id)
 }
 
 func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64) error {

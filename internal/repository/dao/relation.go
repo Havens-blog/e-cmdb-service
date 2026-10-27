@@ -1,4 +1,4 @@
-﻿package dao
+package dao
 
 import (
 	"context"
@@ -36,11 +36,11 @@ type InstanceRelationFilter struct {
 type InstanceRelationDAO interface {
 	Create(ctx context.Context, relation InstanceRelation) (int64, error)
 	CreateBatch(ctx context.Context, relations []InstanceRelation) (int64, error)
-	GetByID(ctx context.Context, id int64) (InstanceRelation, error)
+	GetByID(ctx context.Context, tenantID int64, id int64) (InstanceRelation, error)
 	List(ctx context.Context, filter InstanceRelationFilter) ([]InstanceRelation, error)
 	Count(ctx context.Context, filter InstanceRelationFilter) (int64, error)
-	Delete(ctx context.Context, id int64) error
-	DeleteByInstanceID(ctx context.Context, instanceID int64) error
+	Delete(ctx context.Context, tenantID int64, id int64) error
+	DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error
 	Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error)
 }
 
@@ -96,9 +96,9 @@ func (d *instanceRelationDAO) CreateBatch(ctx context.Context, relations []Insta
 }
 
 // GetByID 根据ID获取关系
-func (d *instanceRelationDAO) GetByID(ctx context.Context, id int64) (InstanceRelation, error) {
+func (d *instanceRelationDAO) GetByID(ctx context.Context, tenantID int64, id int64) (InstanceRelation, error) {
 	var relation InstanceRelation
-	filter := bson.M{"id": id}
+	filter := bson.M{"id": id, "tenant_id": tenantID}
 
 	err := d.db.Collection(InstanceRelationCollection).FindOne(ctx, filter).Decode(&relation)
 	return relation, err
@@ -135,8 +135,8 @@ func (d *instanceRelationDAO) Count(ctx context.Context, filter InstanceRelation
 }
 
 // Delete 删除关系
-func (d *instanceRelationDAO) Delete(ctx context.Context, id int64) error {
-	filter := bson.M{"id": id}
+func (d *instanceRelationDAO) Delete(ctx context.Context, tenantID int64, id int64) error {
+	filter := bson.M{"id": id, "tenant_id": tenantID}
 	result, err := d.db.Collection(InstanceRelationCollection).DeleteOne(ctx, filter)
 	if err != nil {
 		return err
@@ -150,8 +150,9 @@ func (d *instanceRelationDAO) Delete(ctx context.Context, id int64) error {
 }
 
 // DeleteByInstanceID 删除与指定实例相关的所有关系
-func (d *instanceRelationDAO) DeleteByInstanceID(ctx context.Context, instanceID int64) error {
+func (d *instanceRelationDAO) DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error {
 	filter := bson.M{
+		"tenant_id": tenantID,
 		"$or": []bson.M{
 			{"source_instance_id": instanceID},
 			{"target_instance_id": instanceID},
