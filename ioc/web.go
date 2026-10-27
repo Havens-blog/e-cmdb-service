@@ -5,6 +5,7 @@ import (
 	"github.com/Havens-blog/e-common-go/mongox"
 	"github.com/gin-gonic/gin"
 	"github.com/gotomicro/ego/core/elog"
+	"github.com/spf13/viper"
 )
 
 // InitWebServer 初始化 Web 服务器并挂载 CMDB 路由。
@@ -25,7 +26,7 @@ func InitWebServer(db *mongox.Mongo) *gin.Engine {
 
 	// 装配 CMDB 模块并注册路由
 	module := internal.InitModule(db)
-	module.RegisterRoutes(server)
+	module.RegisterRoutes(server, viper.GetString("eiam.public_key"))
 
 	logger.Info("Web服务器初始化完成")
 	return server

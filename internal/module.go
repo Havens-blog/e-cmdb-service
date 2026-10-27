@@ -79,9 +79,9 @@ func InitModule(db *mongox.Mongo) *Module {
 //
 // 两类路由分组：
 //   - 面向终端用户：经 GatewayAuth 透传租户，租户边界由各 handler 内 RequireTenant 承接。
-//   - 面向服务间（/internal）：供 e-cam-service 的 RemoteCMDBAdapter 调用，租户由调用方
-//     显式传参，不走网关租户中间件（调用方已在其网关后完成会话校验）。
-func (m *Module) RegisterRoutes(server *gin.Engine) {
+//   - 面向服务间（/internal）：供 e-cam-service 的 RemoteCMDBAdapter 调用，经 S2SAuth
+//     验 eiam 签发的服务令牌（eiam 唯一签发方）；租户由调用方显式传参。
+func (m *Module) RegisterRoutes(server *gin.Engine, s2sPublicKeyPEM string) {
 	g := server.Group("/api/v1/cmdb", middleware.GatewayAuth(elog.DefaultLogger))
 	m.InstanceHandler.RegisterRoutes(g)
 	m.ModelHandler.RegisterRoutes(g)
@@ -89,7 +89,7 @@ func (m *Module) RegisterRoutes(server *gin.Engine) {
 	m.ModelGroupHandler.RegisterRoutes(g)
 	m.AttributeHandler.RegisterRoutes(g)
 
-	// 内部服务间 API（无网关租户中间件）
-	internal := server.Group("/api/v1/cmdb")
+	// 内部服务间 API：S2S 令牌验签（eiam 唯一签发方），租户由请求显式传参
+	internal := server.Group("/api/v1/cmdb", middleware.S2SAuth(s2sPublicKeyPEM))
 	m.InternalAPI.RegisterRoutes(internal)
 }
