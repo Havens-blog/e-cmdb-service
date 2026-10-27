@@ -20,6 +20,7 @@ type Module struct {
 	ModelGroupHandler *web.ModelGroupHandler
 	AttributeHandler  *web.AttributeHandler
 	QualityHandler    *web.QualityHandler
+	OpenAPIHandler    *web.OpenAPIHandler
 
 	// 对外暴露 service 与 repo，供内部 HTTP API（供 e-cam-service 远程调用）复用。
 	InstanceSvc  service.InstanceService
@@ -37,6 +38,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelGroupDAO := dao.NewModelGroupDAO(db)
 	attributeDAO := dao.NewAttributeDAO(db)
 	attributeGroupDAO := dao.NewAttributeGroupDAO(db)
+	apiTokenDAO := dao.NewApiTokenDAO(db)
+	webhookDAO := dao.NewWebhookDAO(db)
 
 	// Repository
 	instanceRepo := repository.NewInstanceRepository(instanceDAO)
@@ -46,6 +49,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelGroupRepo := repository.NewModelGroupRepository(modelGroupDAO)
 	attributeRepo := repository.NewAttributeRepository(attributeDAO)
 	attributeGroupRepo := repository.NewAttributeGroupRepository(attributeGroupDAO)
+	apiTokenRepo := repository.NewApiTokenRepository(apiTokenDAO)
+	webhookRepo := repository.NewWebhookRepository(webhookDAO)
 
 	// Service
 	instanceSvc := service.NewInstanceService(instanceRepo)
@@ -56,6 +61,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)
 	attributeSvc := service.NewAttributeService(attributeRepo, attributeGroupRepo, modelRepo)
 	qualitySvc := service.NewQualityService(instanceRepo, modelRepo, relationRepo, attributeRepo)
+	openAPISvc := service.NewOpenAPIService(apiTokenRepo, webhookRepo)
 
 	// Handler
 	instanceHandler := web.NewInstanceHandler(instanceSvc)
@@ -64,6 +70,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelGroupHandler := web.NewModelGroupHandler(modelGroupSvc)
 	attributeHandler := web.NewAttributeHandler(attributeSvc)
 	qualityHandler := web.NewQualityHandler(qualitySvc)
+	openAPIHandler := web.NewOpenAPIHandler(openAPISvc)
 	internalAPI := web.NewInternalAPIHandler(instanceRepo)
 
 	return &Module{
@@ -73,6 +80,7 @@ func InitModule(db *mongox.Mongo) *Module {
 		ModelGroupHandler: modelGroupHandler,
 		AttributeHandler:  attributeHandler,
 		QualityHandler:    qualityHandler,
+		OpenAPIHandler:    openAPIHandler,
 		InstanceSvc:       instanceSvc,
 		InstanceRepo:      instanceRepo,
 		InternalAPI:       internalAPI,
@@ -93,6 +101,7 @@ func (m *Module) RegisterRoutes(server *gin.Engine, s2sPublicKeyPEM string) {
 	m.ModelGroupHandler.RegisterRoutes(g)
 	m.AttributeHandler.RegisterRoutes(g)
 	m.QualityHandler.RegisterRoutes(g)
+	m.OpenAPIHandler.RegisterRoutes(g)
 
 	// 内部服务间 API：S2S 令牌验签（eiam 唯一签发方），租户由请求显式传参
 	internal := server.Group("/api/v1/cmdb", middleware.S2SAuth(s2sPublicKeyPEM))

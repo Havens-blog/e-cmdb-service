@@ -52,6 +52,12 @@ var (
 	CannotDeleteBuiltin = ErrorCode{Code: 400008, Msg: "cannot delete builtin group"}
 )
 
+// 开放 API 相关错误码
+var (
+	OpenAPITokenNotFound   = ErrorCode{Code: 404006, Msg: "api token not found"}
+	OpenAPIWebhookNotFound = ErrorCode{Code: 404007, Msg: "webhook not found"}
+)
+
 // 标准错误
 var (
 	ErrInvalidModelUID      = errors.New("model uid cannot be empty")
@@ -87,4 +93,13 @@ var (
 	// 属性分组相关错误
 	ErrAttributeGroupNotFound   = errors.New("attribute group not found")
 	ErrBuiltinGroupCannotDelete = errors.New("builtin group cannot be deleted")
+
+	// 开放 API 相关错误
+	ErrAPITokenNotFound   = errors.New("api token not found")
+	ErrWebhookNotFound    = errors.New("webhook not found")
+	ErrInvalidTokenName   = errors.New("token name cannot be empty")
+	ErrInvalidWebhookName = errors.New("webhook name cannot be empty")
+	ErrInvalidTargetURL   = errors.New("webhook target_url cannot be empty")
+	ErrInvalidEventType   = errors.New("invalid webhook event type")
+	ErrInvalidStatus      = errors.New("invalid status")
 )
