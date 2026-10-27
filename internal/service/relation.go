@@ -14,10 +14,10 @@ import (
 type RelationService interface {
 	Create(ctx context.Context, relation domain.InstanceRelation) (int64, error)
 	CreateBatch(ctx context.Context, relations []domain.InstanceRelation) (int64, error)
-	GetByID(ctx context.Context, id int64) (domain.InstanceRelation, error)
+	GetByID(ctx context.Context, tenantID int64, id int64) (domain.InstanceRelation, error)
 	List(ctx context.Context, filter domain.InstanceRelationFilter) ([]domain.InstanceRelation, int64, error)
-	Delete(ctx context.Context, id int64) error
-	DeleteByInstanceID(ctx context.Context, instanceID int64) error
+	Delete(ctx context.Context, tenantID int64, id int64) error
+	DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error
 }
 
 type relationService struct {
@@ -52,8 +52,8 @@ func (s *relationService) CreateBatch(ctx context.Context, relations []domain.In
 	return s.repo.CreateBatch(ctx, relations)
 }
 
-func (s *relationService) GetByID(ctx context.Context, id int64) (domain.InstanceRelation, error) {
-	relation, err := s.repo.GetByID(ctx, id)
+func (s *relationService) GetByID(ctx context.Context, tenantID int64, id int64) (domain.InstanceRelation, error) {
+	relation, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return domain.InstanceRelation{}, fmt.Errorf("failed to get relation: %w", err)
 	}
@@ -77,8 +77,8 @@ func (s *relationService) List(ctx context.Context, filter domain.InstanceRelati
 	return relations, total, nil
 }
 
-func (s *relationService) Delete(ctx context.Context, id int64) error {
-	existing, err := s.repo.GetByID(ctx, id)
+func (s *relationService) Delete(ctx context.Context, tenantID int64, id int64) error {
+	existing, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
 		return fmt.Errorf("failed to get relation: %w", err)
 	}
@@ -86,9 +86,9 @@ func (s *relationService) Delete(ctx context.Context, id int64) error {
 		return errs.ErrRelationNotFound
 	}
 
-	return s.repo.Delete(ctx, id)
+	return s.repo.Delete(ctx, tenantID, id)
 }
 
-func (s *relationService) DeleteByInstanceID(ctx context.Context, instanceID int64) error {
-	return s.repo.DeleteByInstanceID(ctx, instanceID)
+func (s *relationService) DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error {
+	return s.repo.DeleteByInstanceID(ctx, tenantID, instanceID)
 }

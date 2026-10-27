@@ -13,13 +13,13 @@ import (
 type InstanceRepository interface {
 	Create(ctx context.Context, instance domain.Instance) (int64, error)
 	CreateBatch(ctx context.Context, instances []domain.Instance) (int64, error)
-	Update(ctx context.Context, instance domain.Instance) error
-	GetByID(ctx context.Context, id int64) (domain.Instance, error)
+	Update(ctx context.Context, tenantID int64, instance domain.Instance) error
+	GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error)
 	GetByAssetID(ctx context.Context, tenantID int64, modelUID, assetID string) (domain.Instance, error)
 	List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, error)
 	ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error)
 	Count(ctx context.Context, filter domain.InstanceFilter) (int64, error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance domain.Instance) error
 	// ListUnbound 查询未绑定到服务树的资产
@@ -55,12 +55,12 @@ func (r *instanceRepository) CreateBatch(ctx context.Context, instances []domain
 	return r.dao.CreateBatch(ctx, daoInstances)
 }
 
-func (r *instanceRepository) Update(ctx context.Context, instance domain.Instance) error {
-	return r.dao.Update(ctx, r.toDAO(instance))
+func (r *instanceRepository) Update(ctx context.Context, tenantID int64, instance domain.Instance) error {
+	return r.dao.Update(ctx, tenantID, r.toDAO(instance))
 }
 
-func (r *instanceRepository) GetByID(ctx context.Context, id int64) (domain.Instance, error) {
-	daoInstance, err := r.dao.GetByID(ctx, id)
+func (r *instanceRepository) GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error) {
+	daoInstance, err := r.dao.GetByID(ctx, tenantID, id)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return domain.Instance{}, nil
@@ -113,8 +113,8 @@ func (r *instanceRepository) Count(ctx context.Context, filter domain.InstanceFi
 	return r.dao.Count(ctx, r.toDAOFilter(filter))
 }
 
-func (r *instanceRepository) Delete(ctx context.Context, id int64) error {
-	return r.dao.Delete(ctx, id)
+func (r *instanceRepository) Delete(ctx context.Context, tenantID int64, id int64) error {
+	return r.dao.Delete(ctx, tenantID, id)
 }
 
 func (r *instanceRepository) DeleteByAccountID(ctx context.Context, accountID int64) error {

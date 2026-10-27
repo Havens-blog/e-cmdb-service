@@ -5,8 +5,8 @@ import (
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
-	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
+	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 	"github.com/gotomicro/ego/core/elog"
@@ -195,7 +195,7 @@ func (h *InstanceHandler) GetByID(ctx *gin.Context) {
 		return
 	}
 
-	instance, err := h.svc.GetByID(ctx.Request.Context(), id)
+	instance, err := h.svc.GetByID(ctx.Request.Context(), middleware.GetTenantID(ctx), id)
 	if err != nil {
 		if err == errs.ErrInstanceNotFound {
 			ctx.JSON(404, ErrorResult(errs.InstanceNotFound))
@@ -265,7 +265,8 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 		return ErrorResult(errs.ParamsError), nil
 	}
 
-	existing, err := h.svc.GetByID(ctx.Request.Context(), id)
+	tenantID := middleware.GetTenantID(ctx)
+	existing, err := h.svc.GetByID(ctx.Request.Context(), tenantID, id)
 	if err != nil {
 		if err == errs.ErrInstanceNotFound {
 			return ErrorResult(errs.InstanceNotFound), nil
@@ -285,7 +286,7 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 		}
 	}
 
-	err = h.svc.Update(ctx.Request.Context(), existing)
+	err = h.svc.Update(ctx.Request.Context(), tenantID, existing)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -302,7 +303,7 @@ func (h *InstanceHandler) Delete(ctx *gin.Context) {
 		return
 	}
 
-	err = h.svc.Delete(ctx.Request.Context(), id)
+	err = h.svc.Delete(ctx.Request.Context(), middleware.GetTenantID(ctx), id)
 	if err != nil {
 		if err == errs.ErrInstanceNotFound {
 			ctx.JSON(404, ErrorResult(errs.InstanceNotFound))

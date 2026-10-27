@@ -52,7 +52,7 @@ func (s *topologyService) GetInstanceTopology(ctx context.Context, query domain.
 	}
 
 	// 获取起始实例
-	instance, err := s.instanceRepo.GetByID(ctx, query.InstanceID)
+	instance, err := s.instanceRepo.GetByID(ctx, query.TenantID, query.InstanceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instance: %w", err)
 	}
@@ -99,7 +99,7 @@ func (s *topologyService) expandTopology(ctx context.Context, graph *domain.Topo
 				continue
 			}
 
-			targetInstance, err := s.instanceRepo.GetByID(ctx, rel.TargetInstanceID)
+			targetInstance, err := s.instanceRepo.GetByID(ctx, query.TenantID, rel.TargetInstanceID)
 			if err != nil || targetInstance.ID == 0 {
 				continue
 			}
@@ -146,7 +146,7 @@ func (s *topologyService) expandTopology(ctx context.Context, graph *domain.Topo
 				continue
 			}
 
-			sourceInstance, err := s.instanceRepo.GetByID(ctx, rel.SourceInstanceID)
+			sourceInstance, err := s.instanceRepo.GetByID(ctx, query.TenantID, rel.SourceInstanceID)
 			if err != nil || sourceInstance.ID == 0 {
 				continue
 			}
@@ -257,7 +257,7 @@ func (s *topologyService) GetRelatedInstances(ctx context.Context, tenantID int6
 
 	instances := make([]domain.Instance, 0, len(relations))
 	for _, rel := range relations {
-		inst, err := s.instanceRepo.GetByID(ctx, rel.TargetInstanceID)
+		inst, err := s.instanceRepo.GetByID(ctx, tenantID, rel.TargetInstanceID)
 		if err != nil || inst.ID == 0 {
 			continue
 		}

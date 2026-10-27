@@ -5,8 +5,8 @@ import (
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
-	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
+	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 	"github.com/gotomicro/ego/core/elog"
@@ -356,7 +356,7 @@ func (h *RelationHandler) DeleteInstanceRelation(ctx *gin.Context) {
 		return
 	}
 
-	err = h.relationSvc.Delete(ctx.Request.Context(), id)
+	err = h.relationSvc.Delete(ctx.Request.Context(), middleware.GetTenantID(ctx), id)
 	if err != nil {
 		if err == errs.ErrRelationNotFound {
 			ctx.JSON(404, ErrorResult(errs.RelationNotFound))
