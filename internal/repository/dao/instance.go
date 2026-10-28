@@ -64,7 +64,7 @@ type InstanceDAO interface {
 	GetByID(ctx context.Context, tenantID int64, id int64) (Instance, error)
 	GetByAssetID(ctx context.Context, tenantID int64, modelUID, assetID string) (Instance, error)
 	List(ctx context.Context, filter InstanceFilter) ([]Instance, error)
-	ListByIDs(ctx context.Context, ids []int64) ([]Instance, error)
+	ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]Instance, error)
 	Count(ctx context.Context, filter InstanceFilter) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
@@ -74,7 +74,7 @@ type InstanceDAO interface {
 	// CountUnbound 统计未绑定资产数量
 	CountUnbound(ctx context.Context, tenantID int64) (int64, error)
 	// AggregateStatsByIDs 根据资源ID列表聚合统计（高性能）
-	AggregateStatsByIDs(ctx context.Context, ids []int64) (*AssetStatsResult, error)
+	AggregateStatsByIDs(ctx context.Context, ids []int64, tenantID int64) (*AssetStatsResult, error)
 	// AggregateAllStats 聚合统计全部资产
 	AggregateAllStats(ctx context.Context, tenantID int64) (*AssetStatsResult, error)
 	// AggregateUnboundStats 聚合统计未绑定资产
@@ -182,12 +182,13 @@ func (d *instanceDAO) GetByAssetID(ctx context.Context, tenantID int64, modelUID
 	return instance, err
 }
 
-// ListByIDs 根据ID列表批量查询实例
-func (d *instanceDAO) ListByIDs(ctx context.Context, ids []int64) ([]Instance, error) {
+// ListByIDs 根据ID列表批量查询实例。
+// tenantID > 0 时追加租户过滤；<= 0 时保持历史行为（不按租户过滤）。
+func (d *instanceDAO) ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]Instance, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	filter := bson.M{"id": bson.M{"$in": ids}}
+	filter := listByIDsFilter(ids, tenantID)
 	cursor, err := d.db.Collection(InstanceCollection).Find(ctx, filter)
 	if err != nil {
 		return nil, err
@@ -301,6 +302,24 @@ func (d *instanceDAO) buildQuery(filter InstanceFilter) bson.M {
 	return query
 }
 
+// listByIDsFilter 构建 ListByIDs 的查询谓词。
+func listByIDsFilter(ids []int64, tenantID int64) bson.M {
+	filter := bson.M{"id": bson.M{"$in": ids}}
+	if tenantID > 0 {
+		filter["tenant_id"] = tenantID
+	}
+	return filter
+}
+
+// aggregateStatsByIDsMatch 构建 AggregateStatsByIDs 的 $match 阶段。
+func aggregateStatsByIDsMatch(ids []int64, tenantID int64) bson.M {
+	match := bson.M{"id": bson.M{"$in": ids}}
+	if tenantID > 0 {
+		match["tenant_id"] = tenantID
+	}
+	return match
+}
+
 // unboundPipeline 构建查询未绑定资产的聚合管道
 // 思路: c_instance LEFT JOIN c_resource_binding，保留 binding 为空的记录
 func (d *instanceDAO) unboundPipeline(tenantID int64) mongo.Pipeline {
@@ -378,15 +397,16 @@ func (d *instanceDAO) CountUnbound(ctx context.Context, tenantID int64) (int64, 
 	return result[0].Total, nil
 }
 
-// AggregateStatsByIDs 根据资源ID列表聚合统计（高性能，单次聚合）
-func (d *instanceDAO) AggregateStatsByIDs(ctx context.Context, ids []int64) (*AssetStatsResult, error) {
+// AggregateStatsByIDs 根据资源ID列表聚合统计（高性能，单次聚合）。
+// tenantID > 0 时追加租户过滤；<= 0 时保持历史行为（不按租户过滤）。
+func (d *instanceDAO) AggregateStatsByIDs(ctx context.Context, ids []int64, tenantID int64) (*AssetStatsResult, error) {
 	if len(ids) == 0 {
 		return &AssetStatsResult{ByAssetType: []AssetTypeCount{}, ByProvider: []ProviderCount{}}, nil
 	}
 
 	// 使用 $facet 一次聚合获取所有统计
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"id": bson.M{"$in": ids}}}},
+		{{Key: "$match", Value: aggregateStatsByIDsMatch(ids, tenantID)}},
 		{{Key: "$facet", Value: bson.M{
 			"total": bson.A{
 				bson.M{"$count": "count"},

@@ -52,8 +52,20 @@ func (f *fakeInstanceRepo) GetByAssetID(ctx context.Context, tenantID int64, mod
 func (f *fakeInstanceRepo) List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, error) {
 	return nil, nil
 }
-func (f *fakeInstanceRepo) ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error) {
-	return nil, nil
+func (f *fakeInstanceRepo) ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error) {
+	f.gotTenant = tenantID
+	out := make([]domain.Instance, 0, len(ids))
+	for _, id := range ids {
+		inst, ok := f.instances[id]
+		if !ok {
+			continue
+		}
+		if tenantID > 0 && inst.TenantID != tenantID {
+			continue
+		}
+		out = append(out, inst)
+	}
+	return out, nil
 }
 func (f *fakeInstanceRepo) Count(ctx context.Context, filter domain.InstanceFilter) (int64, error) {
 	return 0, nil
@@ -73,7 +85,8 @@ func (f *fakeInstanceRepo) ListUnbound(ctx context.Context, tenantID int64, offs
 func (f *fakeInstanceRepo) CountUnbound(ctx context.Context, tenantID int64) (int64, error) {
 	return 0, nil
 }
-func (f *fakeInstanceRepo) AggregateStatsByIDs(ctx context.Context, ids []int64) (*dao.AssetStatsResult, error) {
+func (f *fakeInstanceRepo) AggregateStatsByIDs(ctx context.Context, ids []int64, tenantID int64) (*dao.AssetStatsResult, error) {
+	f.gotTenant = tenantID
 	return nil, nil
 }
 func (f *fakeInstanceRepo) AggregateAllStats(ctx context.Context, tenantID int64) (*dao.AssetStatsResult, error) {
@@ -148,6 +161,42 @@ func TestInstanceServiceUpdate_ForwardsTenant(t *testing.T) {
 	}
 	if repo.updatedTenant != 100 || repo.updated.ID != 7 {
 		t.Fatalf("Update tenant/id = %d/%d, want 100/7", repo.updatedTenant, repo.updated.ID)
+	}
+}
+
+func TestInstanceServiceListByIDs_TenantFilter(t *testing.T) {
+	repo := newFakeInstanceRepo()
+	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
+	repo.instances[2] = domain.Instance{ID: 2, TenantID: 200, ModelUID: "m", AssetID: "b"}
+	svc := NewInstanceService(repo)
+
+	got, err := svc.ListByIDs(context.Background(), []int64{1, 2}, 100)
+	if err != nil {
+		t.Fatalf("ListByIDs error = %v", err)
+	}
+	if len(got) != 1 || got[0].ID != 1 {
+		t.Fatalf("ListByIDs tenant=100 returned %v, want only ID 1", got)
+	}
+	if repo.gotTenant != 100 {
+		t.Fatalf("ListByIDs tenant = %d, want 100", repo.gotTenant)
+	}
+}
+
+func TestInstanceServiceListByIDs_NoTenantFilter(t *testing.T) {
+	repo := newFakeInstanceRepo()
+	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
+	repo.instances[2] = domain.Instance{ID: 2, TenantID: 200, ModelUID: "m", AssetID: "b"}
+	svc := NewInstanceService(repo)
+
+	got, err := svc.ListByIDs(context.Background(), []int64{1, 2}, 0)
+	if err != nil {
+		t.Fatalf("ListByIDs error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListByIDs tenant=0 returned %d items, want 2", len(got))
+	}
+	if repo.gotTenant != 0 {
+		t.Fatalf("ListByIDs tenant = %d, want 0", repo.gotTenant)
 	}
 }
 

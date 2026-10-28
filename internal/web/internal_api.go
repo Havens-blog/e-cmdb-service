@@ -40,9 +40,9 @@ type InstanceDTO struct {
 
 // StatsDTO 统计结果的跨服务传输结构。
 type StatsDTO struct {
-	Total       int64            `json:"total"`
-	ByAssetType []TypeCountDTO   `json:"by_asset_type"`
-	ByProvider  []TypeCountDTO   `json:"by_provider"`
+	Total       int64          `json:"total"`
+	ByAssetType []TypeCountDTO `json:"by_asset_type"`
+	ByProvider  []TypeCountDTO `json:"by_provider"`
 }
 
 // TypeCountDTO 分组计数。
@@ -52,8 +52,11 @@ type TypeCountDTO struct {
 }
 
 // IDsReq 批量 ID 请求体。
+// TenantID 可选：>0 时按租户过滤，<=0 时保持历史行为（不按租户过滤），
+// 以兼容尚未传 tenant_id 的 e-cam-service 调用方。
 type IDsReq struct {
-	IDs []int64 `json:"ids"`
+	IDs      []int64 `json:"ids"`
+	TenantID int64   `json:"tenant_id"`
 }
 
 // RegisterRoutes 注册内部 API 路由。
@@ -76,7 +79,7 @@ func (h *InternalAPIHandler) BatchGet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	instances, err := h.repo.ListByIDs(c.Request.Context(), req.IDs)
+	instances, err := h.repo.ListByIDs(c.Request.Context(), req.IDs, req.TenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -115,7 +118,7 @@ func (h *InternalAPIHandler) StatsByIDs(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	result, err := h.repo.AggregateStatsByIDs(c.Request.Context(), req.IDs)
+	result, err := h.repo.AggregateStatsByIDs(c.Request.Context(), req.IDs, req.TenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

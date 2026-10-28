@@ -18,7 +18,7 @@ type InstanceService interface {
 	GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error)
 	GetByAssetID(ctx context.Context, tenantID int64, modelUID, assetID string) (domain.Instance, error)
 	List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, int64, error)
-	ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error)
+	ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance domain.Instance) error
@@ -101,11 +101,11 @@ func (s *instanceService) GetByAssetID(ctx context.Context, tenantID int64, mode
 	return s.repo.GetByAssetID(ctx, tenantID, modelUID, assetID)
 }
 
-func (s *instanceService) ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error) {
+func (s *instanceService) ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return s.repo.ListByIDs(ctx, ids)
+	return s.repo.ListByIDs(ctx, ids, tenantID)
 }
 
 func (s *instanceService) List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, int64, error) {
