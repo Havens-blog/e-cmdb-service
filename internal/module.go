@@ -21,6 +21,7 @@ type Module struct {
 	AttributeHandler  *web.AttributeHandler
 	QualityHandler    *web.QualityHandler
 	OpenAPIHandler    *web.OpenAPIHandler
+	ImpactHandler     *web.ImpactHandler
 
 	// 对外暴露 service 与 repo，供内部 HTTP API（供 e-cam-service 远程调用）复用。
 	InstanceSvc  service.InstanceService
@@ -62,6 +63,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	attributeSvc := service.NewAttributeService(attributeRepo, attributeGroupRepo, modelRepo)
 	qualitySvc := service.NewQualityService(instanceRepo, modelRepo, relationRepo, attributeRepo)
 	openAPISvc := service.NewOpenAPIService(apiTokenRepo, webhookRepo)
+	impactSvc := service.NewImpactService(instanceRepo, relationRepo)
 
 	// Handler
 	instanceHandler := web.NewInstanceHandler(instanceSvc)
@@ -71,6 +73,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	attributeHandler := web.NewAttributeHandler(attributeSvc)
 	qualityHandler := web.NewQualityHandler(qualitySvc)
 	openAPIHandler := web.NewOpenAPIHandler(openAPISvc)
+	impactHandler := web.NewImpactHandler(impactSvc)
 	internalAPI := web.NewInternalAPIHandler(instanceRepo)
 
 	return &Module{
@@ -81,6 +84,7 @@ func InitModule(db *mongox.Mongo) *Module {
 		AttributeHandler:  attributeHandler,
 		QualityHandler:    qualityHandler,
 		OpenAPIHandler:    openAPIHandler,
+		ImpactHandler:     impactHandler,
 		InstanceSvc:       instanceSvc,
 		InstanceRepo:      instanceRepo,
 		InternalAPI:       internalAPI,
@@ -102,6 +106,7 @@ func (m *Module) RegisterRoutes(server *gin.Engine, s2sPublicKeyPEM string) {
 	m.AttributeHandler.RegisterRoutes(g)
 	m.QualityHandler.RegisterRoutes(g)
 	m.OpenAPIHandler.RegisterRoutes(g)
+	m.ImpactHandler.RegisterRoutes(g)
 
 	// 内部服务间 API：S2S 令牌验签（eiam 唯一签发方），租户由请求显式传参
 	internal := server.Group("/api/v1/cmdb", middleware.S2SAuth(s2sPublicKeyPEM))
