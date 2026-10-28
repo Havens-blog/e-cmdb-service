@@ -86,7 +86,7 @@ func (f *fakeInstanceRepo) AggregateUnboundStats(ctx context.Context, tenantID i
 func TestInstanceServiceGetByID_TenantMismatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	_, err := svc.GetByID(context.Background(), 200, 1)
 	if !errors.Is(err, errs.ErrInstanceNotFound) {
@@ -100,7 +100,7 @@ func TestInstanceServiceGetByID_TenantMismatch(t *testing.T) {
 func TestInstanceServiceGetByID_TenantMatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	got, err := svc.GetByID(context.Background(), 100, 1)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestInstanceServiceGetByID_TenantMatch(t *testing.T) {
 func TestInstanceServiceDelete_TenantMismatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100}
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	err := svc.Delete(context.Background(), 200, 1)
 	if !errors.Is(err, errs.ErrInstanceNotFound) {
@@ -128,7 +128,7 @@ func TestInstanceServiceDelete_TenantMismatch(t *testing.T) {
 func TestInstanceServiceDelete_TenantMatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100}
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	if err := svc.Delete(context.Background(), 100, 1); err != nil {
 		t.Fatalf("Delete error = %v", err)
@@ -140,7 +140,7 @@ func TestInstanceServiceDelete_TenantMatch(t *testing.T) {
 
 func TestInstanceServiceUpdate_ForwardsTenant(t *testing.T) {
 	repo := newFakeInstanceRepo()
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	inst := domain.Instance{ID: 7, ModelUID: "m", AssetID: "a", TenantID: 100}
 	if err := svc.Update(context.Background(), 100, inst); err != nil {
@@ -198,7 +198,7 @@ func (f *fakeRelationRepo) DeleteByInstanceID(ctx context.Context, tenantID int6
 	f.deleteByInstanceID = instanceID
 	return nil
 }
-func (f *fakeRelationRepo) Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error) {
+func (f *fakeRelationRepo) Exists(ctx context.Context, tenantID int64, sourceID, targetID int64, relationTypeUID string) (bool, error) {
 	return false, nil
 }
 

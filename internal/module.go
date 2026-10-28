@@ -53,8 +53,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	webhookRepo := repository.NewWebhookRepository(webhookDAO)
 
 	// Service
-	instanceSvc := service.NewInstanceService(instanceRepo)
-	modelSvc := service.NewModelService(modelRepo)
+	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo)
+	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	relationSvc := service.NewRelationService(relationRepo)
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)

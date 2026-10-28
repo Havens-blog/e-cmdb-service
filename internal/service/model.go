@@ -21,15 +21,17 @@ type ModelService interface {
 }
 
 type modelService struct {
-	repo   repository.ModelRepository
-	logger *elog.Component
+	repo         repository.ModelRepository
+	instanceRepo repository.InstanceRepository
+	logger       *elog.Component
 }
 
 // NewModelService 创建模型服务
-func NewModelService(repo repository.ModelRepository) ModelService {
+func NewModelService(repo repository.ModelRepository, instanceRepo repository.InstanceRepository) ModelService {
 	return &modelService{
-		repo:   repo,
-		logger: elog.DefaultLogger,
+		repo:         repo,
+		instanceRepo: instanceRepo,
+		logger:       elog.DefaultLogger,
 	}
 }
 
@@ -104,6 +106,14 @@ func (s *modelService) Delete(ctx context.Context, uid string) error {
 	}
 	if !exists {
 		return errs.ErrModelNotFound
+	}
+
+	count, err := s.instanceRepo.Count(ctx, domain.InstanceFilter{ModelUID: uid})
+	if err != nil {
+		return fmt.Errorf("failed to count model instances: %w", err)
+	}
+	if count > 0 {
+		return errs.ErrModelHasInstances
 	}
 
 	return s.repo.Delete(ctx, uid)

@@ -205,6 +205,10 @@ func (h *ModelHandler) Delete(ctx *gin.Context) {
 			ctx.JSON(404, ErrorResult(errs.ModelNotFound))
 			return
 		}
+		if err == errs.ErrModelHasInstances {
+			ctx.JSON(400, ErrorResult(errs.ModelHasInstances))
+			return
+		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}

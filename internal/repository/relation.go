@@ -18,7 +18,7 @@ type InstanceRelationRepository interface {
 	Count(ctx context.Context, filter domain.InstanceRelationFilter) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error
-	Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error)
+	Exists(ctx context.Context, tenantID int64, sourceID, targetID int64, relationTypeUID string) (bool, error)
 }
 
 type instanceRelationRepository struct {
@@ -78,8 +78,8 @@ func (r *instanceRelationRepository) DeleteByInstanceID(ctx context.Context, ten
 	return r.dao.DeleteByInstanceID(ctx, tenantID, instanceID)
 }
 
-func (r *instanceRelationRepository) Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error) {
-	return r.dao.Exists(ctx, sourceID, targetID, relationTypeUID)
+func (r *instanceRelationRepository) Exists(ctx context.Context, tenantID int64, sourceID, targetID int64, relationTypeUID string) (bool, error) {
+	return r.dao.Exists(ctx, tenantID, sourceID, targetID, relationTypeUID)
 }
 
 func (r *instanceRelationRepository) toDAO(relation domain.InstanceRelation) dao.InstanceRelation {

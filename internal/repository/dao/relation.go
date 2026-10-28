@@ -41,7 +41,7 @@ type InstanceRelationDAO interface {
 	Count(ctx context.Context, filter InstanceRelationFilter) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error
-	Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error)
+	Exists(ctx context.Context, tenantID int64, sourceID, targetID int64, relationTypeUID string) (bool, error)
 }
 
 type instanceRelationDAO struct {
@@ -163,8 +163,9 @@ func (d *instanceRelationDAO) DeleteByInstanceID(ctx context.Context, tenantID i
 }
 
 // Exists 检查关系是否存在
-func (d *instanceRelationDAO) Exists(ctx context.Context, sourceID, targetID int64, relationTypeUID string) (bool, error) {
+func (d *instanceRelationDAO) Exists(ctx context.Context, tenantID int64, sourceID, targetID int64, relationTypeUID string) (bool, error) {
 	filter := bson.M{
+		"tenant_id":          tenantID,
 		"source_instance_id": sourceID,
 		"target_instance_id": targetID,
 		"relation_type_uid":  relationTypeUID,
