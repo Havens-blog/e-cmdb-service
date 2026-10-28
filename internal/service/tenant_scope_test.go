@@ -168,7 +168,7 @@ func TestInstanceServiceListByIDs_TenantFilter(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
 	repo.instances[2] = domain.Instance{ID: 2, TenantID: 200, ModelUID: "m", AssetID: "b"}
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	got, err := svc.ListByIDs(context.Background(), []int64{1, 2}, 100)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestInstanceServiceListByIDs_NoTenantFilter(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
 	repo.instances[2] = domain.Instance{ID: 2, TenantID: 200, ModelUID: "m", AssetID: "b"}
-	svc := NewInstanceService(repo)
+	svc := NewInstanceService(repo, &fakeModelRepo{})
 
 	got, err := svc.ListByIDs(context.Background(), []int64{1, 2}, 0)
 	if err != nil {

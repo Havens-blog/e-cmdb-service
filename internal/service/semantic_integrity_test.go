@@ -92,7 +92,7 @@ func (f *semanticInstanceRepo) List(ctx context.Context, filter domain.InstanceF
 	return nil, nil
 }
 
-func (f *semanticInstanceRepo) ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error) {
+func (f *semanticInstanceRepo) ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error) {
 	return nil, nil
 }
 
@@ -120,7 +120,7 @@ func (f *semanticInstanceRepo) CountUnbound(ctx context.Context, tenantID int64)
 	return 0, nil
 }
 
-func (f *semanticInstanceRepo) AggregateStatsByIDs(ctx context.Context, ids []int64) (*dao.AssetStatsResult, error) {
+func (f *semanticInstanceRepo) AggregateStatsByIDs(ctx context.Context, ids []int64, tenantID int64) (*dao.AssetStatsResult, error) {
 	return nil, nil
 }
 
