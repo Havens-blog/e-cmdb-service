@@ -8,6 +8,7 @@ import (
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/Havens-blog/e-cmdb-service/internal/web"
 	"github.com/Havens-blog/e-common-go/mongox"
+	"github.com/ecodeclub/ginx/session"
 	"github.com/gin-gonic/gin"
 	"github.com/gotomicro/ego/core/elog"
 )
@@ -74,7 +75,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	qualityHandler := web.NewQualityHandler(qualitySvc)
 	openAPIHandler := web.NewOpenAPIHandler(openAPISvc)
 	impactHandler := web.NewImpactHandler(impactSvc)
-	internalAPI := web.NewInternalAPIHandler(instanceRepo)
+	internalAPI := web.NewInternalAPIHandler(instanceRepo, modelRepo)
 
 	return &Module{
 		InstanceHandler:   instanceHandler,
@@ -94,11 +95,13 @@ func InitModule(db *mongox.Mongo) *Module {
 // RegisterRoutes 在 /api/v1/cmdb 前缀下注册 CMDB 路由。
 //
 // 两类路由分组：
-//   - 面向终端用户：经 GatewayAuth 透传租户，租户边界由各 handler 内 RequireTenant 承接。
+//   - 面向终端用户：经 SessionAuth 本地校验平台共享会话（eiam 签发），租户取自
+//     会话 claims（客户端自报的 X-Tenant-Id 一律不采纳），租户边界由各 handler
+//     内 RequireTenant 承接。
 //   - 面向服务间（/internal）：供 e-cam-service 的 RemoteCMDBAdapter 调用，经 S2SAuth
 //     验 eiam 签发的服务令牌（eiam 唯一签发方）；租户由调用方显式传参。
-func (m *Module) RegisterRoutes(server *gin.Engine, s2sPublicKeyPEM string) {
-	g := server.Group("/api/v1/cmdb", middleware.GatewayAuth(elog.DefaultLogger))
+func (m *Module) RegisterRoutes(server *gin.Engine, sp session.Provider, s2sPublicKeyPEM string) {
+	g := server.Group("/api/v1/cmdb", middleware.SessionAuth(sp, elog.DefaultLogger))
 	m.InstanceHandler.RegisterRoutes(g)
 	m.ModelHandler.RegisterRoutes(g)
 	m.RelationHandler.RegisterRoutes(g)

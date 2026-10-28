@@ -25,8 +25,11 @@ func InitWebServer(db *mongox.Mongo) *gin.Engine {
 	})
 
 	// 装配 CMDB 模块并注册路由
+	// 用户路由经 SessionAuth 本地校验平台共享会话（不再信任网关透传头），
+	// /internal 路由经 S2SAuth 验 eiam 签发的服务令牌。
+	sp := InitSessionProvider()
 	module := internal.InitModule(db)
-	module.RegisterRoutes(server, viper.GetString("eiam.public_key"))
+	module.RegisterRoutes(server, sp, viper.GetString("eiam.public_key"))
 
 	logger.Info("Web服务器初始化完成")
 	return server
