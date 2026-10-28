@@ -17,7 +17,7 @@ type InstanceRepository interface {
 	GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error)
 	GetByAssetID(ctx context.Context, tenantID int64, modelUID, assetID string) (domain.Instance, error)
 	List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, error)
-	ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error)
+	ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error)
 	Count(ctx context.Context, filter domain.InstanceFilter) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
@@ -27,7 +27,7 @@ type InstanceRepository interface {
 	// CountUnbound 统计未绑定资产数量
 	CountUnbound(ctx context.Context, tenantID int64) (int64, error)
 	// AggregateStatsByIDs 根据资源ID列表聚合统计（高性能）
-	AggregateStatsByIDs(ctx context.Context, ids []int64) (*dao.AssetStatsResult, error)
+	AggregateStatsByIDs(ctx context.Context, ids []int64, tenantID int64) (*dao.AssetStatsResult, error)
 	// AggregateAllStats 聚合统计全部资产
 	AggregateAllStats(ctx context.Context, tenantID int64) (*dao.AssetStatsResult, error)
 	// AggregateUnboundStats 聚合统计未绑定资产
@@ -81,11 +81,11 @@ func (r *instanceRepository) GetByAssetID(ctx context.Context, tenantID int64, m
 	return r.toDomain(daoInstance), nil
 }
 
-func (r *instanceRepository) ListByIDs(ctx context.Context, ids []int64) ([]domain.Instance, error) {
+func (r *instanceRepository) ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	daoInstances, err := r.dao.ListByIDs(ctx, ids)
+	daoInstances, err := r.dao.ListByIDs(ctx, ids, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +141,8 @@ func (r *instanceRepository) CountUnbound(ctx context.Context, tenantID int64) (
 	return r.dao.CountUnbound(ctx, tenantID)
 }
 
-func (r *instanceRepository) AggregateStatsByIDs(ctx context.Context, ids []int64) (*dao.AssetStatsResult, error) {
-	return r.dao.AggregateStatsByIDs(ctx, ids)
+func (r *instanceRepository) AggregateStatsByIDs(ctx context.Context, ids []int64, tenantID int64) (*dao.AssetStatsResult, error) {
+	return r.dao.AggregateStatsByIDs(ctx, ids, tenantID)
 }
 
 func (r *instanceRepository) AggregateAllStats(ctx context.Context, tenantID int64) (*dao.AssetStatsResult, error) {
