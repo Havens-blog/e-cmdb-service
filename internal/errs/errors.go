@@ -17,9 +17,10 @@ var (
 
 // 模型相关错误码
 var (
-	ModelNotFound = ErrorCode{Code: 404001, Msg: "model not found"}
-	ModelExists   = ErrorCode{Code: 409001, Msg: "model already exists"}
-	ModelInvalid  = ErrorCode{Code: 400002, Msg: "model invalid"}
+	ModelNotFound     = ErrorCode{Code: 404001, Msg: "model not found"}
+	ModelExists       = ErrorCode{Code: 409001, Msg: "model already exists"}
+	ModelInvalid      = ErrorCode{Code: 400002, Msg: "model invalid"}
+	ModelHasInstances = ErrorCode{Code: 400009, Msg: "model has instances, cannot delete"}
 )
 
 // 实例相关错误码
@@ -65,6 +66,7 @@ var (
 	ErrInvalidModelCategory = errors.New("model category cannot be empty")
 	ErrModelNotFound        = errors.New("model not found")
 	ErrModelExists          = errors.New("model already exists")
+	ErrModelHasInstances    = errors.New("model has instances, cannot delete")
 
 	ErrInvalidAssetID    = errors.New("asset id cannot be empty")
 	ErrInvalidTenantID   = errors.New("tenant id cannot be empty")

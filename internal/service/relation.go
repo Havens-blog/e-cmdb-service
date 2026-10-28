@@ -34,7 +34,7 @@ func NewRelationService(repo repository.InstanceRelationRepository) RelationServ
 }
 
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {
-	exists, err := s.repo.Exists(ctx, relation.SourceInstanceID, relation.TargetInstanceID, relation.RelationTypeUID)
+	exists, err := s.repo.Exists(ctx, relation.TenantID, relation.SourceInstanceID, relation.TargetInstanceID, relation.RelationTypeUID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to check relation existence: %w", err)
 	}

@@ -26,21 +26,31 @@ type InstanceService interface {
 }
 
 type instanceService struct {
-	repo   repository.InstanceRepository
-	logger *elog.Component
+	repo      repository.InstanceRepository
+	modelRepo repository.ModelRepository
+	logger    *elog.Component
 }
 
 // NewInstanceService 创建实例服务
-func NewInstanceService(repo repository.InstanceRepository) InstanceService {
+func NewInstanceService(repo repository.InstanceRepository, modelRepo repository.ModelRepository) InstanceService {
 	return &instanceService{
-		repo:   repo,
-		logger: elog.DefaultLogger,
+		repo:      repo,
+		modelRepo: modelRepo,
+		logger:    elog.DefaultLogger,
 	}
 }
 
 func (s *instanceService) Create(ctx context.Context, instance domain.Instance) (int64, error) {
 	if err := instance.Validate(); err != nil {
 		return 0, err
+	}
+
+	model, err := s.modelRepo.GetByUID(ctx, instance.ModelUID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to check model existence: %w", err)
+	}
+	if model.ID == 0 {
+		return 0, errs.ErrModelNotFound
 	}
 
 	existing, err := s.repo.GetByAssetID(ctx, instance.TenantID, instance.ModelUID, instance.AssetID)

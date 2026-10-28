@@ -112,6 +112,9 @@ func (h *InstanceHandler) Create(ctx *gin.Context, req CreateInstanceReq) (ginx.
 
 	id, err := h.svc.Create(ctx.Request.Context(), instance)
 	if err != nil {
+		if err == errs.ErrModelNotFound {
+			return ErrorResult(errs.ModelNotFound), nil
+		}
 		if err == errs.ErrInstanceExists {
 			return ErrorResultWithMsg(errs.ParamsError, "instance already exists"), nil
 		}
