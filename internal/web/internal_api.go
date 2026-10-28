@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
 	"github.com/gin-gonic/gin"
 )
@@ -15,12 +16,13 @@ import (
 // 仅内网网关可达；租户由调用方（e-cam-service，已在网关后完成会话校验）在请求体/
 // 查询参数显式传入——这是服务间可信调用，不走 RequireTenant。
 type InternalAPIHandler struct {
-	repo repository.InstanceRepository
+	repo   repository.InstanceRepository
+	models repository.ModelRepository
 }
 
 // NewInternalAPIHandler 创建内部 API 处理器。
-func NewInternalAPIHandler(repo repository.InstanceRepository) *InternalAPIHandler {
-	return &InternalAPIHandler{repo: repo}
+func NewInternalAPIHandler(repo repository.InstanceRepository, models repository.ModelRepository) *InternalAPIHandler {
+	return &InternalAPIHandler{repo: repo, models: models}
 }
 
 // ---- wire DTO：与 e-cam-service port 包的结构镜像，JSON tag 为跨服务契约 ----
@@ -69,7 +71,25 @@ func (h *InternalAPIHandler) RegisterRoutes(r *gin.RouterGroup) {
 		g.POST("/stats/by-ids", h.StatsByIDs)
 		g.GET("/stats/all", h.StatsAll)
 		g.GET("/stats/unbound", h.StatsUnbound)
+		g.GET("/model-aliases", h.ModelAliases)
 	}
+}
+
+// ModelAliases GET /internal/model-aliases 返回「别名 → 模型 UID」归一映射，
+// 供 e-cam-service 的 modelalias.RemoteResolver 定期拉取（启动 + 每 5 分钟），
+// 在多云同步写实例前把 {provider}_{类型} 形式的 model_uid 归一到真实模型，
+// 从源头消除孤儿实例（映射规则见 domain.BuildModelAliases）。
+//
+// 响应为 code/msg/data 信封（与 resolver 的解码契约一致；注意区别于本文件
+// 其余端点的裸 JSON——那些对应 e-cam RemoteCMDBAdapter 的另一套契约）。
+func (h *InternalAPIHandler) ModelAliases(c *gin.Context) {
+	// Limit=0 → DAO 不设上限；模型表为配置级数据（当前 ~80 条），全量拉取
+	models, err := h.models.List(c.Request.Context(), domain.ModelFilter{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 50000, "msg": err.Error(), "data": nil})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "ok", "data": domain.BuildModelAliases(models)})
 }
 
 // BatchGet 批量按 ID 查实例。
