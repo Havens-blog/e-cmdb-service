@@ -1,0 +1,5061 @@
+{
+  "components": {
+    "schemas": {
+      "APITokenListResp": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/APITokenVO"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "APITokenVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "expire_at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ApiToken": {
+        "properties": {
+          "CreateTime": {},
+          "ExpireAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "Scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "Status": {
+            "type": "string"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TokenHash": {
+            "type": "string"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "Attribute": {
+        "properties": {
+          "CreateTime": {},
+          "Default": {
+            "type": "string"
+          },
+          "Description": {
+            "type": "string"
+          },
+          "Display": {
+            "type": "boolean"
+          },
+          "DisplayName": {
+            "type": "string"
+          },
+          "Editable": {
+            "type": "boolean"
+          },
+          "FieldName": {
+            "type": "string"
+          },
+          "FieldType": {
+            "type": "string"
+          },
+          "FieldUID": {
+            "type": "string"
+          },
+          "GroupID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Link": {
+            "type": "boolean"
+          },
+          "LinkModel": {
+            "type": "string"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "Option": {},
+          "Placeholder": {
+            "type": "string"
+          },
+          "Required": {
+            "type": "boolean"
+          },
+          "Searchable": {
+            "type": "boolean"
+          },
+          "Secure": {
+            "type": "boolean"
+          },
+          "Unique": {
+            "type": "boolean"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "AttributeFilter": {
+        "properties": {
+          "Display": {
+            "type": "boolean"
+          },
+          "FieldType": {
+            "type": "string"
+          },
+          "GroupID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Required": {
+            "type": "boolean"
+          },
+          "Searchable": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "AttributeGroup": {
+        "properties": {
+          "CreateTime": {},
+          "Description": {
+            "type": "string"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "IsBuiltin": {
+            "type": "boolean"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "UID": {
+            "type": "string"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "AttributeGroupFilter": {
+        "properties": {
+          "IsBuiltin": {
+            "type": "boolean"
+          },
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AttributeGroupVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "is_builtin": {
+            "type": "boolean"
+          },
+          "model_uid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AttributeGroupWithAttrs": {
+        "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/Attribute"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AttributeGroupWithAttrsVO": {
+        "properties": {
+          "attributes": {
+            "items": {
+              "$ref": "#/components/schemas/AttributeVO"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AttributeHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "AttributeVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "default": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display": {
+            "type": "boolean"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "field_name": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string"
+          },
+          "field_uid": {
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "link": {
+            "type": "boolean"
+          },
+          "link_model": {
+            "type": "string"
+          },
+          "model_uid": {
+            "type": "string"
+          },
+          "option": {},
+          "placeholder": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "searchable": {
+            "type": "boolean"
+          },
+          "secure": {
+            "type": "boolean"
+          },
+          "unique": {
+            "type": "boolean"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CreateAttributeGroupReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreateAttributeReq": {
+        "properties": {
+          "default": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display": {
+            "type": "boolean"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "field_name": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string"
+          },
+          "field_uid": {
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "link": {
+            "type": "boolean"
+          },
+          "link_model": {
+            "type": "string"
+          },
+          "option": {},
+          "placeholder": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "searchable": {
+            "type": "boolean"
+          },
+          "secure": {
+            "type": "boolean"
+          },
+          "unique": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "CreateBatchInstanceRelationReq": {
+        "properties": {
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/CreateInstanceRelationReq"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CreateBatchInstanceReq": {
+        "properties": {
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/CreateInstanceReq"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CreateInstanceRelationReq": {
+        "properties": {
+          "relation_type_uid": {
+            "type": "string"
+          },
+          "source_instance_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "target_instance_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CreateInstanceReq": {
+        "properties": {
+          "account_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "model_uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreateModelGroupReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreateModelRelationReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "relation_type": {
+            "type": "string"
+          },
+          "source_model_uid": {
+            "type": "string"
+          },
+          "source_to_target": {
+            "type": "string"
+          },
+          "target_model_uid": {
+            "type": "string"
+          },
+          "target_to_source": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreateModelReq": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "extensible": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "level": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent_uid": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreateTokenReq": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ttl_days": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CreateWebhookReq": {
+        "properties": {
+          "event_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CreatedTokenVO": {
+        "properties": {
+          "created_at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "expire_at": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "IDsReq": {
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "tenant_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ImpactEdge": {
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "relation_type_uid": {
+            "type": "string"
+          },
+          "source_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "target_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ImpactGraph": {
+        "properties": {
+          "downstream_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/ImpactEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/ImpactNode"
+            },
+            "type": "array"
+          },
+          "root": {
+            "$ref": "#/components/schemas/ImpactNode"
+          },
+          "upstream_count": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ImpactHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "ImpactNode": {
+        "properties": {
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "depth": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "instance_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Instance": {
+        "properties": {
+          "AccountID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "AssetID": {
+            "type": "string"
+          },
+          "AssetName": {
+            "type": "string"
+          },
+          "Attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "CreateTime": {},
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "InstanceDTO": {
+        "properties": {
+          "account_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_uid": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InstanceFilter": {
+        "properties": {
+          "AccountID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "AssetName": {
+            "type": "string"
+          },
+          "Attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InstanceHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "InstanceListResp": {
+        "properties": {
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceVO"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InstanceRelation": {
+        "properties": {
+          "CreateTime": {},
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "RelationTypeUID": {
+            "type": "string"
+          },
+          "SourceInstanceID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TargetInstanceID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InstanceRelationFilter": {
+        "properties": {
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "RelationTypeUID": {
+            "type": "string"
+          },
+          "SourceInstanceID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TargetInstanceID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InstanceRelationVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "relation_type_uid": {
+            "type": "string"
+          },
+          "source_instance_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "target_instance_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InstanceVO": {
+        "properties": {
+          "account_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_uid": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "InternalAPIHandler": {
+        "properties": {
+          "models": {},
+          "repo": {}
+        },
+        "type": "object"
+      },
+      "Model": {
+        "properties": {
+          "Category": {
+            "type": "string"
+          },
+          "CreateTime": {},
+          "Description": {
+            "type": "string"
+          },
+          "Extensible": {
+            "type": "boolean"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Icon": {
+            "type": "string"
+          },
+          "Level": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelGroupID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "ParentUID": {
+            "type": "string"
+          },
+          "Provider": {
+            "type": "string"
+          },
+          "UID": {
+            "type": "string"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "ModelFilter": {
+        "properties": {
+          "Category": {
+            "type": "string"
+          },
+          "Extensible": {
+            "type": "boolean"
+          },
+          "Level": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelGroupID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ParentUID": {
+            "type": "string"
+          },
+          "Provider": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModelGroup": {
+        "properties": {
+          "create_time": {},
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "is_builtin": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "update_time": {}
+        },
+        "type": "object"
+      },
+      "ModelGroupFilter": {
+        "properties": {
+          "IsBuiltin": {
+            "type": "boolean"
+          },
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "UID": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModelGroupHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "ModelGroupVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "is_builtin": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ModelGroupWithModels": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ModelGroupWithModelsVO": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelVO"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ModelHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "ModelListResp": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelVO"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ModelRelationType": {
+        "properties": {
+          "CreateTime": {},
+          "Description": {
+            "type": "string"
+          },
+          "Direction": {
+            "type": "string"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "RelationType": {
+            "type": "string"
+          },
+          "SourceModelUID": {
+            "type": "string"
+          },
+          "SourceToTarget": {
+            "type": "string"
+          },
+          "TargetModelUID": {
+            "type": "string"
+          },
+          "TargetToSource": {
+            "type": "string"
+          },
+          "UID": {
+            "type": "string"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "ModelRelationTypeFilter": {
+        "properties": {
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "RelationType": {
+            "type": "string"
+          },
+          "SourceModelUID": {
+            "type": "string"
+          },
+          "TargetModelUID": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModelRelationVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "relation_type": {
+            "type": "string"
+          },
+          "source_model_uid": {
+            "type": "string"
+          },
+          "source_to_target": {
+            "type": "string"
+          },
+          "target_model_uid": {
+            "type": "string"
+          },
+          "target_to_source": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ModelTopologyEdge": {
+        "properties": {
+          "relation_name": {
+            "type": "string"
+          },
+          "relation_type": {
+            "type": "string"
+          },
+          "relation_uid": {
+            "type": "string"
+          },
+          "source_model_uid": {
+            "type": "string"
+          },
+          "target_model_uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModelTopologyGraph": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/ModelTopologyEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/ModelTopologyNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ModelTopologyNode": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModelVO": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "extensible": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "level": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent_uid": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "OpenAPIHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "QualityHandler": {
+        "properties": {
+          "svc": {}
+        },
+        "type": "object"
+      },
+      "QualityIssue": {
+        "properties": {
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "field_name": {
+            "type": "string"
+          },
+          "field_uid": {
+            "type": "string"
+          },
+          "instance_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_uid": {
+            "type": "string"
+          },
+          "relation_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "QualityIssuesResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QualityIssue"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "QualityOverview": {
+        "properties": {
+          "dangling_relation_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "health_score": {
+            "type": "number"
+          },
+          "missing_field_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "orphan_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total_instances": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RelationHandler": {
+        "properties": {
+          "modelRelSvc": {},
+          "relationSvc": {},
+          "topologySvc": {}
+        },
+        "type": "object"
+      },
+      "RelationType": {
+        "properties": {
+          "CreateTime": {},
+          "Description": {
+            "type": "string"
+          },
+          "Direction": {
+            "type": "string"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "SourceModelUID": {
+            "type": "string"
+          },
+          "TargetModelUID": {
+            "type": "string"
+          },
+          "UID": {
+            "type": "string"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "RelationTypeFilter": {
+        "properties": {
+          "Limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Offset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "SourceModelUID": {
+            "type": "string"
+          },
+          "TargetModelUID": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StatsDTO": {
+        "properties": {
+          "by_asset_type": {
+            "items": {
+              "$ref": "#/components/schemas/TypeCountDTO"
+            },
+            "type": "array"
+          },
+          "by_provider": {
+            "items": {
+              "$ref": "#/components/schemas/TypeCountDTO"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TopologyEdge": {
+        "properties": {
+          "relation_name": {
+            "type": "string"
+          },
+          "relation_type": {
+            "type": "string"
+          },
+          "relation_type_uid": {
+            "type": "string"
+          },
+          "source_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "target_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TopologyGraph": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/TopologyEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TopologyNode"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "TopologyNode": {
+        "properties": {
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "category": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "model_name": {
+            "type": "string"
+          },
+          "model_uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TopologyQuery": {
+        "properties": {
+          "Depth": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Direction": {
+            "type": "string"
+          },
+          "InstanceID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ModelUID": {
+            "type": "string"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "TypeCountDTO": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateAttributeGroupReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateAttributeReq": {
+        "properties": {
+          "default": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "display": {
+            "type": "boolean"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "field_name": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "link": {
+            "type": "boolean"
+          },
+          "link_model": {
+            "type": "string"
+          },
+          "option": {},
+          "placeholder": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "searchable": {
+            "type": "boolean"
+          },
+          "secure": {
+            "type": "boolean"
+          },
+          "unique": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateInstanceReq": {
+        "properties": {
+          "asset_name": {
+            "type": "string"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateModelGroupReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sort_order": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateModelRelationReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_to_target": {
+            "type": "string"
+          },
+          "target_to_source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateModelReq": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "extensible": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "model_group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateWebhookReq": {
+        "properties": {
+          "event_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "UpsertBatchInstanceReq": {
+        "properties": {
+          "instances": {
+            "items": {
+              "$ref": "#/components/schemas/UpsertInstanceReq"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "UpsertInstanceReq": {
+        "properties": {
+          "account_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "model_uid": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Webhook": {
+        "properties": {
+          "CreateTime": {},
+          "EventTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "Secret": {
+            "type": "string"
+          },
+          "Status": {
+            "type": "string"
+          },
+          "TargetURL": {
+            "type": "string"
+          },
+          "TenantID": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "UpdateTime": {}
+        },
+        "type": "object"
+      },
+      "WebhookListResp": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookVO"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "WebhookUpdate": {
+        "properties": {
+          "EventTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "Secret": {
+            "type": "string"
+          },
+          "Status": {
+            "type": "string"
+          },
+          "TargetURL": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WebhookVO": {
+        "properties": {
+          "create_time": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "event_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          },
+          "update_time": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "attributeService": {
+        "properties": {
+          "attrGroupRepo": {},
+          "attrRepo": {},
+          "modelRepo": {}
+        },
+        "type": "object"
+      },
+      "impactService": {
+        "properties": {
+          "instanceRepo": {},
+          "logger": {},
+          "relationRepo": {}
+        },
+        "type": "object"
+      },
+      "instanceService": {
+        "properties": {
+          "logger": {},
+          "modelRepo": {},
+          "repo": {}
+        },
+        "type": "object"
+      },
+      "modelGroupService": {
+        "properties": {
+          "groupRepo": {},
+          "modelRepo": {}
+        },
+        "type": "object"
+      },
+      "modelRelationTypeService": {
+        "properties": {
+          "logger": {},
+          "repo": {}
+        },
+        "type": "object"
+      },
+      "modelService": {
+        "properties": {
+          "instanceRepo": {},
+          "logger": {},
+          "repo": {}
+        },
+        "type": "object"
+      },
+      "openAPIService": {
+        "properties": {
+          "tokenRepo": {},
+          "webhookRepo": {}
+        },
+        "type": "object"
+      },
+      "qualityAnalysis": {
+        "properties": {
+          "danglingRelationCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "healthScore": {
+            "type": "number"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/QualityIssue"
+            },
+            "type": "array"
+          },
+          "missingFieldCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "orphanCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalInstances": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "qualityService": {
+        "properties": {
+          "attrRepo": {},
+          "instanceRepo": {},
+          "modelRepo": {},
+          "relationRepo": {}
+        },
+        "type": "object"
+      },
+      "queueItem": {
+        "properties": {
+          "depth": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "relationService": {
+        "properties": {
+          "logger": {},
+          "repo": {}
+        },
+        "type": "object"
+      },
+      "topologyService": {
+        "properties": {
+          "instanceRepo": {},
+          "logger": {},
+          "modelRelRepo": {},
+          "modelRepo": {},
+          "relationRepo": {}
+        },
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "由 cmd/openapi 从 e-cmdb-service 源码静态生成，请勿手工编辑。",
+    "title": "e-cmdb-service API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/v1/cmdb/field-types": {
+      "get": {
+        "operationId": "get_GetFieldTypes",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "field-types"
+        ]
+      }
+    },
+    "/api/v1/cmdb/impact": {
+      "get": {
+        "operationId": "get_GetImpact",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ImpactGraph"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "impact"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instance-relations": {
+      "get": {
+        "operationId": "get_ListInstanceRelations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instance-relations"
+        ]
+      },
+      "post": {
+        "operationId": "post_CreateInstanceRelation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInstanceRelationReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instance-relations"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instance-relations/:id": {
+      "delete": {
+        "operationId": "delete_DeleteInstanceRelation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instance-relations"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instance-relations/batch": {
+      "post": {
+        "operationId": "post_CreateBatchInstanceRelation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBatchInstanceRelationReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "count": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instance-relations"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instances": {
+      "get": {
+        "operationId": "get_List",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      },
+      "post": {
+        "operationId": "post_Create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInstanceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instances/:id": {
+      "delete": {
+        "operationId": "delete_Delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      },
+      "get": {
+        "operationId": "get_GetByID",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      },
+      "put": {
+        "operationId": "put_Update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInstanceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instances/batch": {
+      "post": {
+        "operationId": "post_CreateBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBatchInstanceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "count": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instances/upsert": {
+      "post": {
+        "operationId": "post_Upsert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertInstanceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instances/upsert-batch": {
+      "post": {
+        "operationId": "post_UpsertBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBatchInstanceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/instances/batch-get": {
+      "post": {
+        "operationId": "post_BatchGet",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/instances/list": {
+      "get": {
+        "operationId": "get_ListInstances",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/instances/unbound": {
+      "get": {
+        "operationId": "get_ListUnbound",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/instances/unbound/count": {
+      "get": {
+        "operationId": "get_CountUnbound",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/model-aliases": {
+      "get": {
+        "operationId": "get_ModelAliases",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/stats/all": {
+      "get": {
+        "operationId": "get_StatsAll",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/stats/by-ids": {
+      "post": {
+        "operationId": "post_StatsByIDs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/internal/stats/unbound": {
+      "get": {
+        "operationId": "get_StatsUnbound",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/cmdb/model-groups": {
+      "get": {
+        "operationId": "get_List",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      },
+      "post": {
+        "operationId": "post_Create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModelGroupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      }
+    },
+    "/api/v1/cmdb/model-groups/:uid": {
+      "delete": {
+        "operationId": "delete_Delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      },
+      "get": {
+        "operationId": "get_GetByUID",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      },
+      "put": {
+        "operationId": "put_Update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateModelGroupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      }
+    },
+    "/api/v1/cmdb/model-groups/init": {
+      "post": {
+        "operationId": "post_InitBuiltinGroups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      }
+    },
+    "/api/v1/cmdb/model-groups/with-models": {
+      "get": {
+        "operationId": "get_ListWithModels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-groups"
+        ]
+      }
+    },
+    "/api/v1/cmdb/model-relations": {
+      "get": {
+        "operationId": "get_ListModelRelations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-relations"
+        ]
+      },
+      "post": {
+        "operationId": "post_CreateModelRelation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModelRelationReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-relations"
+        ]
+      }
+    },
+    "/api/v1/cmdb/model-relations/:uid": {
+      "delete": {
+        "operationId": "delete_DeleteModelRelation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-relations"
+        ]
+      },
+      "get": {
+        "operationId": "get_GetModelRelation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-relations"
+        ]
+      },
+      "put": {
+        "operationId": "put_UpdateModelRelation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateModelRelationReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "model-relations"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models": {
+      "get": {
+        "operationId": "get_List",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "post": {
+        "operationId": "post_Create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateModelReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models/:uid": {
+      "delete": {
+        "operationId": "delete_Delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "get": {
+        "operationId": "get_GetByUID",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "put": {
+        "operationId": "put_Update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateModelReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models/:uid/attribute-groups": {
+      "get": {
+        "operationId": "get_ListAttributeGroups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "post": {
+        "operationId": "post_CreateAttributeGroup",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttributeGroupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models/:uid/attribute-groups/:id": {
+      "delete": {
+        "operationId": "delete_DeleteAttributeGroup",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "get": {
+        "operationId": "get_GetAttributeGroup",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "put": {
+        "operationId": "put_UpdateAttributeGroup",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAttributeGroupReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models/:uid/attributes": {
+      "get": {
+        "operationId": "get_ListAttributes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "post": {
+        "operationId": "post_CreateAttribute",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttributeReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models/:uid/attributes/:id": {
+      "delete": {
+        "operationId": "delete_DeleteAttribute",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "get": {
+        "operationId": "get_GetAttribute",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      },
+      "put": {
+        "operationId": "put_UpdateAttribute",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAttributeReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/models/:uid/attributes/grouped": {
+      "get": {
+        "operationId": "get_ListAttributesWithGroups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/cmdb/open-api/tokens": {
+      "get": {
+        "operationId": "get_ListTokens",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/APITokenListResp"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      },
+      "post": {
+        "operationId": "post_CreateToken",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTokenReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CreatedTokenVO"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      }
+    },
+    "/api/v1/cmdb/open-api/tokens/:id": {
+      "delete": {
+        "operationId": "delete_RevokeToken",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      }
+    },
+    "/api/v1/cmdb/open-api/webhooks": {
+      "get": {
+        "operationId": "get_ListWebhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/WebhookListResp"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      },
+      "post": {
+        "operationId": "post_CreateWebhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "properties": {
+                        "id": {}
+                      },
+                      "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      }
+    },
+    "/api/v1/cmdb/open-api/webhooks/:id": {
+      "delete": {
+        "operationId": "delete_DeleteWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      },
+      "put": {
+        "operationId": "put_UpdateWebhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWebhookReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "open-api"
+        ]
+      }
+    },
+    "/api/v1/cmdb/quality/issues": {
+      "get": {
+        "operationId": "get_Issues",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/QualityIssuesResult"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/v1/cmdb/quality/overview": {
+      "get": {
+        "operationId": "get_Overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/QualityOverview"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/v1/cmdb/topology/instance/:id": {
+      "get": {
+        "operationId": "get_get_topology_instance_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "topology"
+        ]
+      }
+    },
+    "/api/v1/cmdb/topology/model": {
+      "get": {
+        "operationId": "get_GetModelTopology",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "topology"
+        ]
+      }
+    },
+    "/api/v1/cmdb/topology/related/:id": {
+      "get": {
+        "operationId": "get_get_topology_related_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {},
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "topology"
+        ]
+      }
+    }
+  }
+}
