@@ -132,6 +132,11 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 	// 导致传任意分组都返回全部模型。此处补齐解析。
 	groupIDStr := ctx.Query("model_group_id")
 
+	// extensible：是否可扩展。DAO 的 buildQuery 已支持（filter.Extensible != nil），
+	// 但此前 handler 未解析，导致传任意值都返回全部模型
+	// （实测 extensible=true / false 均返回 80，而实际全部为 true）。
+	extensibleStr := ctx.Query("extensible")
+
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
 
@@ -151,6 +156,7 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 		ParentUID:    parentUID,
 		Level:        level,
 		ModelGroupID: groupID,
+		Extensible:   parseOptionalBool(extensibleStr),
 		Offset:       offset,
 		Limit:        limit,
 	}
