@@ -14,7 +14,12 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "APITokenVO": {
         "properties": {
@@ -43,7 +48,16 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "expire_at",
+          "id",
+          "name",
+          "scopes",
+          "status"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ApiToken": {
         "properties": {
@@ -77,7 +91,19 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "ExpireAt",
+          "ID",
+          "Name",
+          "Scopes",
+          "Status",
+          "TenantID",
+          "TokenHash",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "Attribute": {
         "properties": {
@@ -145,7 +171,32 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "Default",
+          "Description",
+          "Display",
+          "DisplayName",
+          "Editable",
+          "FieldName",
+          "FieldType",
+          "FieldUID",
+          "GroupID",
+          "ID",
+          "Index",
+          "Link",
+          "LinkModel",
+          "ModelUID",
+          "Option",
+          "Placeholder",
+          "Required",
+          "Searchable",
+          "Secure",
+          "Unique",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "AttributeFilter": {
         "properties": {
@@ -177,7 +228,15 @@
             "type": "boolean"
           }
         },
-        "type": "object"
+        "required": [
+          "FieldType",
+          "GroupID",
+          "Limit",
+          "ModelUID",
+          "Offset"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "AttributeGroup": {
         "properties": {
@@ -207,7 +266,19 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "Description",
+          "ID",
+          "Index",
+          "IsBuiltin",
+          "ModelUID",
+          "Name",
+          "UID",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "AttributeGroupFilter": {
         "properties": {
@@ -226,7 +297,13 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "Limit",
+          "ModelUID",
+          "Offset"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "AttributeGroupVO": {
         "properties": {
@@ -262,7 +339,19 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "description",
+          "id",
+          "index",
+          "is_builtin",
+          "model_uid",
+          "name",
+          "uid",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "AttributeGroupWithAttrs": {
         "properties": {
@@ -273,7 +362,11 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "attributes"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "AttributeGroupWithAttrsVO": {
         "properties": {
@@ -284,13 +377,21 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "attributes"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "AttributeHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "AttributeVO": {
         "properties": {
@@ -364,7 +465,32 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "default",
+          "description",
+          "display",
+          "display_name",
+          "editable",
+          "field_name",
+          "field_type",
+          "field_uid",
+          "group_id",
+          "id",
+          "index",
+          "link",
+          "link_model",
+          "model_uid",
+          "option",
+          "placeholder",
+          "required",
+          "searchable",
+          "secure",
+          "unique",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateAttributeGroupReq": {
         "properties": {
@@ -382,7 +508,14 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "index",
+          "name",
+          "uid"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateAttributeReq": {
         "properties": {
@@ -441,7 +574,28 @@
             "type": "boolean"
           }
         },
-        "type": "object"
+        "required": [
+          "default",
+          "description",
+          "display",
+          "display_name",
+          "editable",
+          "field_name",
+          "field_type",
+          "field_uid",
+          "group_id",
+          "index",
+          "link",
+          "link_model",
+          "option",
+          "placeholder",
+          "required",
+          "searchable",
+          "secure",
+          "unique"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateBatchInstanceRelationReq": {
         "properties": {
@@ -452,7 +606,11 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "relations"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateBatchInstanceReq": {
         "properties": {
@@ -463,7 +621,11 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "instances"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateInstanceRelationReq": {
         "properties": {
@@ -479,7 +641,13 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "relation_type_uid",
+          "source_instance_id",
+          "target_instance_id"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateInstanceReq": {
         "properties": {
@@ -501,7 +669,15 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "account_id",
+          "asset_id",
+          "asset_name",
+          "attributes",
+          "model_uid"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateModelGroupReq": {
         "properties": {
@@ -522,7 +698,15 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "icon",
+          "name",
+          "sort_order",
+          "uid"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateModelRelationReq": {
         "properties": {
@@ -554,7 +738,19 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "direction",
+          "name",
+          "relation_type",
+          "source_model_uid",
+          "source_to_target",
+          "target_model_uid",
+          "target_to_source",
+          "uid"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateModelReq": {
         "properties": {
@@ -591,7 +787,20 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "category",
+          "description",
+          "extensible",
+          "icon",
+          "level",
+          "model_group_id",
+          "name",
+          "parent_uid",
+          "provider",
+          "uid"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateTokenReq": {
         "properties": {
@@ -609,7 +818,13 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "name",
+          "scopes",
+          "ttl_days"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreateWebhookReq": {
         "properties": {
@@ -629,7 +844,14 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "event_types",
+          "name",
+          "secret",
+          "target_url"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "CreatedTokenVO": {
         "properties": {
@@ -658,7 +880,16 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "created_at",
+          "expire_at",
+          "id",
+          "name",
+          "scopes",
+          "token"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "IDsReq": {
         "properties": {
@@ -674,7 +905,12 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "ids",
+          "tenant_id"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ImpactEdge": {
         "properties": {
@@ -693,7 +929,14 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "direction",
+          "relation_type_uid",
+          "source_id",
+          "target_id"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ImpactGraph": {
         "properties": {
@@ -721,13 +964,25 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "downstream_count",
+          "edges",
+          "nodes",
+          "root",
+          "upstream_count"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ImpactHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ImpactNode": {
         "properties": {
@@ -752,7 +1007,16 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "asset_id",
+          "asset_name",
+          "depth",
+          "direction",
+          "instance_id",
+          "model_uid"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "Instance": {
         "properties": {
@@ -784,7 +1048,19 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "AccountID",
+          "AssetID",
+          "AssetName",
+          "Attributes",
+          "CreateTime",
+          "ID",
+          "ModelUID",
+          "TenantID",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "InstanceDTO": {
         "properties": {
@@ -822,7 +1098,19 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "account_id",
+          "asset_id",
+          "asset_name",
+          "attributes",
+          "create_time",
+          "id",
+          "model_uid",
+          "tenant_id",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "InstanceFilter": {
         "properties": {
@@ -853,13 +1141,27 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "AccountID",
+          "AssetName",
+          "Attributes",
+          "Limit",
+          "ModelUID",
+          "Offset",
+          "TenantID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "InstanceHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "InstanceListResp": {
         "properties": {
@@ -874,7 +1176,12 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "instances",
+          "total"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "InstanceRelation": {
         "properties": {
@@ -899,7 +1206,16 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "ID",
+          "RelationTypeUID",
+          "SourceInstanceID",
+          "TargetInstanceID",
+          "TenantID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "InstanceRelationFilter": {
         "properties": {
@@ -927,7 +1243,16 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "Limit",
+          "Offset",
+          "RelationTypeUID",
+          "SourceInstanceID",
+          "TargetInstanceID",
+          "TenantID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "InstanceRelationVO": {
         "properties": {
@@ -955,7 +1280,16 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "id",
+          "relation_type_uid",
+          "source_instance_id",
+          "target_instance_id",
+          "tenant_id"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "InstanceVO": {
         "properties": {
@@ -993,14 +1327,31 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "account_id",
+          "asset_id",
+          "asset_name",
+          "attributes",
+          "create_time",
+          "id",
+          "model_uid",
+          "tenant_id",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "InternalAPIHandler": {
         "properties": {
           "models": {},
           "repo": {}
         },
-        "type": "object"
+        "required": [
+          "models",
+          "repo"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "Model": {
         "properties": {
@@ -1043,7 +1394,23 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "Category",
+          "CreateTime",
+          "Description",
+          "Extensible",
+          "ID",
+          "Icon",
+          "Level",
+          "ModelGroupID",
+          "Name",
+          "ParentUID",
+          "Provider",
+          "UID",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelFilter": {
         "properties": {
@@ -1076,7 +1443,17 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "Category",
+          "Level",
+          "Limit",
+          "ModelGroupID",
+          "Offset",
+          "ParentUID",
+          "Provider"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelGroup": {
         "properties": {
@@ -1106,7 +1483,19 @@
           },
           "update_time": {}
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "description",
+          "icon",
+          "id",
+          "is_builtin",
+          "name",
+          "sort_order",
+          "uid",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelGroupFilter": {
         "properties": {
@@ -1125,13 +1514,23 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "Limit",
+          "Offset",
+          "UID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelGroupHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ModelGroupVO": {
         "properties": {
@@ -1167,7 +1566,19 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "description",
+          "icon",
+          "id",
+          "is_builtin",
+          "name",
+          "sort_order",
+          "uid",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ModelGroupWithModels": {
         "properties": {
@@ -1178,7 +1589,11 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "models"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelGroupWithModelsVO": {
         "properties": {
@@ -1189,13 +1604,21 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "models"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ModelHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ModelListResp": {
         "properties": {
@@ -1210,7 +1633,12 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "models",
+          "total"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ModelRelationType": {
         "properties": {
@@ -1248,7 +1676,22 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "Description",
+          "Direction",
+          "ID",
+          "Name",
+          "RelationType",
+          "SourceModelUID",
+          "SourceToTarget",
+          "TargetModelUID",
+          "TargetToSource",
+          "UID",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelRelationTypeFilter": {
         "properties": {
@@ -1270,7 +1713,15 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "Limit",
+          "Offset",
+          "RelationType",
+          "SourceModelUID",
+          "TargetModelUID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelRelationVO": {
         "properties": {
@@ -1314,7 +1765,22 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "description",
+          "direction",
+          "id",
+          "name",
+          "relation_type",
+          "source_model_uid",
+          "source_to_target",
+          "target_model_uid",
+          "target_to_source",
+          "uid",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "ModelTopologyEdge": {
         "properties": {
@@ -1334,7 +1800,15 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "relation_name",
+          "relation_type",
+          "relation_uid",
+          "source_model_uid",
+          "target_model_uid"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelTopologyGraph": {
         "properties": {
@@ -1351,7 +1825,12 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "edges",
+          "nodes"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelTopologyNode": {
         "properties": {
@@ -1371,7 +1850,14 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "category",
+          "name",
+          "provider",
+          "uid"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "ModelVO": {
         "properties": {
@@ -1420,19 +1906,43 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "category",
+          "create_time",
+          "description",
+          "extensible",
+          "icon",
+          "id",
+          "level",
+          "model_group_id",
+          "name",
+          "parent_uid",
+          "provider",
+          "uid",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "OpenAPIHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "QualityHandler": {
         "properties": {
           "svc": {}
         },
-        "type": "object"
+        "required": [
+          "svc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "QualityIssue": {
         "properties": {
@@ -1466,7 +1976,12 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "type"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "QualityIssuesResult": {
         "properties": {
@@ -1481,7 +1996,12 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "QualityOverview": {
         "properties": {
@@ -1505,7 +2025,15 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "dangling_relation_count",
+          "health_score",
+          "missing_field_count",
+          "orphan_count",
+          "total_instances"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "RelationHandler": {
         "properties": {
@@ -1513,7 +2041,13 @@
           "relationSvc": {},
           "topologySvc": {}
         },
-        "type": "object"
+        "required": [
+          "modelRelSvc",
+          "relationSvc",
+          "topologySvc"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "RelationType": {
         "properties": {
@@ -1542,7 +2076,19 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "Description",
+          "Direction",
+          "ID",
+          "Name",
+          "SourceModelUID",
+          "TargetModelUID",
+          "UID",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "RelationTypeFilter": {
         "properties": {
@@ -1561,7 +2107,14 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "Limit",
+          "Offset",
+          "SourceModelUID",
+          "TargetModelUID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "StatsDTO": {
         "properties": {
@@ -1582,7 +2135,13 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "by_asset_type",
+          "by_provider",
+          "total"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "TopologyEdge": {
         "properties": {
@@ -1604,7 +2163,15 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "relation_name",
+          "relation_type",
+          "relation_type_uid",
+          "source_id",
+          "target_id"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "TopologyGraph": {
         "properties": {
@@ -1621,7 +2188,12 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "edges",
+          "nodes"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "TopologyNode": {
         "properties": {
@@ -1652,7 +2224,15 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "asset_id",
+          "asset_name",
+          "id",
+          "model_name",
+          "model_uid"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "TopologyQuery": {
         "properties": {
@@ -1675,7 +2255,15 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "Depth",
+          "Direction",
+          "InstanceID",
+          "ModelUID",
+          "TenantID"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "TypeCountDTO": {
         "properties": {
@@ -1687,7 +2275,12 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "count",
+          "key"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateAttributeGroupReq": {
         "properties": {
@@ -1702,7 +2295,13 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "index",
+          "name"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateAttributeReq": {
         "properties": {
@@ -1758,7 +2357,20 @@
             "type": "boolean"
           }
         },
-        "type": "object"
+        "required": [
+          "default",
+          "description",
+          "display_name",
+          "field_name",
+          "field_type",
+          "group_id",
+          "index",
+          "link_model",
+          "option",
+          "placeholder"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateInstanceReq": {
         "properties": {
@@ -1770,7 +2382,12 @@
             "type": "object"
           }
         },
-        "type": "object"
+        "required": [
+          "asset_name",
+          "attributes"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateModelGroupReq": {
         "properties": {
@@ -1788,7 +2405,14 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "icon",
+          "name",
+          "sort_order"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateModelRelationReq": {
         "properties": {
@@ -1805,7 +2429,14 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "name",
+          "source_to_target",
+          "target_to_source"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateModelReq": {
         "properties": {
@@ -1826,7 +2457,14 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "description",
+          "icon",
+          "model_group_id",
+          "name"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpdateWebhookReq": {
         "properties": {
@@ -1849,7 +2487,11 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "event_types"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpsertBatchInstanceReq": {
         "properties": {
@@ -1860,7 +2502,11 @@
             "type": "array"
           }
         },
-        "type": "object"
+        "required": [
+          "instances"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "UpsertInstanceReq": {
         "properties": {
@@ -1882,7 +2528,15 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "account_id",
+          "asset_id",
+          "asset_name",
+          "attributes",
+          "model_uid"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "Webhook": {
         "properties": {
@@ -1915,7 +2569,19 @@
           },
           "UpdateTime": {}
         },
-        "type": "object"
+        "required": [
+          "CreateTime",
+          "EventTypes",
+          "ID",
+          "Name",
+          "Secret",
+          "Status",
+          "TargetURL",
+          "TenantID",
+          "UpdateTime"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "WebhookListResp": {
         "properties": {
@@ -1930,7 +2596,12 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "WebhookUpdate": {
         "properties": {
@@ -1953,7 +2624,11 @@
             "type": "string"
           }
         },
-        "type": "object"
+        "required": [
+          "EventTypes"
+        ],
+        "type": "object",
+        "x-layer": "domain"
       },
       "WebhookVO": {
         "properties": {
@@ -1985,7 +2660,17 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "create_time",
+          "event_types",
+          "id",
+          "name",
+          "status",
+          "target_url",
+          "update_time"
+        ],
+        "type": "object",
+        "x-layer": "web"
       },
       "attributeService": {
         "properties": {
@@ -1993,7 +2678,13 @@
           "attrRepo": {},
           "modelRepo": {}
         },
-        "type": "object"
+        "required": [
+          "attrGroupRepo",
+          "attrRepo",
+          "modelRepo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "impactService": {
         "properties": {
@@ -2001,7 +2692,12 @@
           "logger": {},
           "relationRepo": {}
         },
-        "type": "object"
+        "required": [
+          "instanceRepo",
+          "relationRepo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "instanceService": {
         "properties": {
@@ -2009,21 +2705,35 @@
           "modelRepo": {},
           "repo": {}
         },
-        "type": "object"
+        "required": [
+          "modelRepo",
+          "repo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "modelGroupService": {
         "properties": {
           "groupRepo": {},
           "modelRepo": {}
         },
-        "type": "object"
+        "required": [
+          "groupRepo",
+          "modelRepo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "modelRelationTypeService": {
         "properties": {
           "logger": {},
           "repo": {}
         },
-        "type": "object"
+        "required": [
+          "repo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "modelService": {
         "properties": {
@@ -2031,14 +2741,24 @@
           "logger": {},
           "repo": {}
         },
-        "type": "object"
+        "required": [
+          "instanceRepo",
+          "repo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "openAPIService": {
         "properties": {
           "tokenRepo": {},
           "webhookRepo": {}
         },
-        "type": "object"
+        "required": [
+          "tokenRepo",
+          "webhookRepo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "qualityAnalysis": {
         "properties": {
@@ -2068,7 +2788,16 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "danglingRelationCount",
+          "healthScore",
+          "issues",
+          "missingFieldCount",
+          "orphanCount",
+          "totalInstances"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "qualityService": {
         "properties": {
@@ -2077,7 +2806,14 @@
           "modelRepo": {},
           "relationRepo": {}
         },
-        "type": "object"
+        "required": [
+          "attrRepo",
+          "instanceRepo",
+          "modelRepo",
+          "relationRepo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "queueItem": {
         "properties": {
@@ -2090,14 +2826,23 @@
             "type": "integer"
           }
         },
-        "type": "object"
+        "required": [
+          "depth",
+          "id"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "relationService": {
         "properties": {
           "logger": {},
           "repo": {}
         },
-        "type": "object"
+        "required": [
+          "repo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       },
       "topologyService": {
         "properties": {
@@ -2107,7 +2852,14 @@
           "modelRepo": {},
           "relationRepo": {}
         },
-        "type": "object"
+        "required": [
+          "instanceRepo",
+          "modelRelRepo",
+          "modelRepo",
+          "relationRepo"
+        ],
+        "type": "object",
+        "x-layer": "service"
       }
     }
   },

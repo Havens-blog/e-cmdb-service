@@ -42,6 +42,7 @@ type StructDef struct {
 	Name   string
 	Fields []Field
 	Pkg    string
+	Layer  string // domain / service / web：仅 web 层类型进入前端契约
 }
 
 type Route struct {
@@ -62,6 +63,7 @@ type Gen struct {
 	handlerFields map[string]map[string]string
 	routes        []Route
 	rootDir       string
+	layer         string
 }
 
 func main() {
@@ -71,6 +73,7 @@ func main() {
 		basePath = flag.String("base", "/api/v1/cmdb", "路由公共前缀")
 		title    = flag.String("title", "e-cmdb-service API", "规范标题")
 		version  = flag.String("version", "1.0.0", "API 版本")
+		tsOut    = flag.String("ts-out", "", "可选：同时输出 TypeScript 类型文件（供前端直接使用）")
 	)
 	flag.Parse()
 
@@ -99,11 +102,23 @@ func main() {
 	must(os.WriteFile(*outFile, buf, 0o644))
 
 	fmt.Printf("已生成 %s：%d 条路由，%d 个 schema\n", *outFile, len(g.routes), len(g.structs))
+	if *tsOut != "" {
+		must(writeTS(*tsOut, spec))
+		fmt.Printf("已生成 TypeScript 类型：%s\n", *tsOut)
+	}
 }
 
 // ---------- 扫描 ----------
 
 func (g *Gen) scanDir(dir string) error {
+	switch {
+	case strings.HasSuffix(filepath.ToSlash(dir), "internal/domain"):
+		g.layer = "domain"
+	case strings.HasSuffix(filepath.ToSlash(dir), "internal/service"):
+		g.layer = "service"
+	case strings.HasSuffix(filepath.ToSlash(dir), "internal/web"):
+		g.layer = "web"
+	}
 	pkgs, err := parser.ParseDir(g.fset, dir, func(fi os.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")
 	}, 0)
@@ -121,8 +136,11 @@ func (g *Gen) scanDir(dir string) error {
 	return nil
 }
 
-func jsonNameOf(f *ast.Field) (string, bool) {
+// jsonNameOf 解析 json tag，返回字段名与是否必填。
+// 必填判定：tag 不含 omitempty，且 Go 类型不是指针（指针语义上可空）。
+func jsonNameOf(f *ast.Field) (string, bool, bool) {
 	name := ""
+	optional := false
 	if f.Tag != nil {
 		tag := strings.Trim(f.Tag.Value, "`")
 		if i := strings.Index(tag, `json:"`); i >= 0 {
@@ -130,17 +148,24 @@ func jsonNameOf(f *ast.Field) (string, bool) {
 			if j := strings.Index(rest, `"`); j > 0 {
 				parts := strings.Split(rest[:j], ",")
 				name = parts[0]
-
+				for _, p := range parts[1:] {
+					if p == "omitempty" {
+						optional = true
+					}
+				}
 			}
 		}
 	}
 	if name == "-" {
-		return "", false
+		return "", false, false
 	}
 	if name == "" && len(f.Names) > 0 {
 		name = f.Names[0].Name
 	}
-	return name, true
+	if _, isPtr := f.Type.(*ast.StarExpr); isPtr {
+		optional = true
+	}
+	return name, true, !optional
 }
 
 func typeToString(e ast.Expr) string {
@@ -176,19 +201,19 @@ func (g *Gen) collectStructs(file *ast.File, pkg string) {
 		if !ok {
 			return true
 		}
-		def := &StructDef{Name: ts.Name.Name, Pkg: pkg}
+		def := &StructDef{Name: ts.Name.Name, Pkg: pkg, Layer: g.layer}
 		for _, f := range st.Fields.List {
 			if len(f.Names) == 0 {
 				continue // 匿名字段忽略
 			}
-			name, ok := jsonNameOf(f)
+			name, ok, required := jsonNameOf(f)
 			if !ok {
 				continue
 			}
 			def.Fields = append(def.Fields, Field{
 				JSONName: name,
 				GoType:   typeToString(f.Type),
-				Required: false,
+				Required: required,
 			})
 		}
 		if _, exists := g.structs[def.Name]; !exists {
@@ -708,13 +733,24 @@ func (g *Gen) buildSchemas() map[string]any {
 	out := map[string]any{}
 	for name, def := range g.structs {
 		props := map[string]any{}
+		var required []string
 		for _, f := range def.Fields {
 			props[f.JSONName] = g.schemaRef(f.GoType)
+			if f.Required {
+				required = append(required, f.JSONName)
+			}
 		}
-		out[name] = map[string]any{
+		s := map[string]any{
 			"type":       "object",
 			"properties": props,
+			// 扩展字段：标记来源层级，供 TS 生成时只输出 web 层传输类型
+			"x-layer": def.Layer,
 		}
+		if len(required) > 0 {
+			sort.Strings(required)
+			s["required"] = required
+		}
+		out[name] = s
 	}
 	return out
 }
