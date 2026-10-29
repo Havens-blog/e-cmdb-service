@@ -65,6 +65,8 @@ type Gen struct {
 	routes        []Route
 	rootDir       string
 	layer         string
+	// 函数/方法名 -> 第一个返回类型（用于 Result(h.toVO(x)) 这类推断）
+	funcReturns map[string]string
 }
 
 func main() {
@@ -85,6 +87,7 @@ func main() {
 		svcMethods:    map[string]map[string]string{},
 		handlerFields: map[string]map[string]string{},
 		rootDir:       *rootDir,
+		funcReturns:   map[string]string{},
 	}
 
 	must := func(err error) {
@@ -206,6 +209,17 @@ func typeToString(e ast.Expr) string {
 }
 
 func (g *Gen) collectStructs(file *ast.File, pkg string) {
+	// 顺带收集包内函数/方法的第一个返回类型
+	ast.Inspect(file, func(n ast.Node) bool {
+		fd, ok := n.(*ast.FuncDecl)
+		if !ok || fd.Type == nil || fd.Type.Results == nil || len(fd.Type.Results.List) == 0 {
+			return true
+		}
+		if _, exists := g.funcReturns[fd.Name.Name]; !exists {
+			g.funcReturns[fd.Name.Name] = typeToString(fd.Type.Results.List[0].Type)
+		}
+		return true
+	})
 	ast.Inspect(file, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSpec)
 		if !ok {
@@ -578,15 +592,35 @@ func (g *Gen) inferResponse(r Route) Schema {
 					return false
 				}
 				ast.Inspect(fd.Body, func(inner ast.Node) bool {
-					rs, ok := inner.(*ast.ReturnStmt)
-					if !ok || len(rs.Results) == 0 {
+					// 两种成功响应写法都要覆盖：
+					//   A) return Result(x), nil            （ginx.Wrap 风格）
+					//   B) ctx.JSON(200, Result(x))         （gin 原生风格，本仓库 GET/DELETE 多用）
+					var call *ast.CallExpr
+					switch n := inner.(type) {
+					case *ast.ReturnStmt:
+						if len(n.Results) == 0 {
+							return true
+						}
+						c, ok := n.Results[0].(*ast.CallExpr)
+						if !ok {
+							return true
+						}
+						call = c
+					case *ast.CallExpr:
+						// ctx.JSON(code, Result(x))
+						sel, ok := n.Fun.(*ast.SelectorExpr)
+						if !ok || sel.Sel.Name != "JSON" || len(n.Args) != 2 {
+							return true
+						}
+						c, ok := n.Args[1].(*ast.CallExpr)
+						if !ok {
+							return true
+						}
+						call = c
+					default:
 						return true
 					}
-					call, ok := rs.Results[0].(*ast.CallExpr)
-					if !ok || len(call.Args) != 1 {
-						return true
-					}
-					if fn, ok := call.Fun.(*ast.Ident); !ok || fn.Name != "Result" {
+					if fn, ok := call.Fun.(*ast.Ident); !ok || fn.Name != "Result" || len(call.Args) != 1 {
 						return true
 					}
 					ret = g.schemaFromArg(call.Args[0], r)
@@ -640,6 +674,27 @@ func (g *Gen) schemaFromArg(arg ast.Expr, r Route) Schema {
 			}
 			if len(props) > 0 {
 				return map[string]any{"type": "object", "properties": props}
+			}
+		}
+		return map[string]any{}
+	case *ast.CallExpr:
+		// Result(h.toVO(inst)) / Result(toDTOs(xs))：查被调函数的第一个返回类型
+		name := ""
+		switch fn := a.Fun.(type) {
+		case *ast.Ident:
+			name = fn.Name
+		case *ast.SelectorExpr:
+			name = fn.Sel.Name
+		}
+		if name != "" {
+			if rt, ok := g.funcReturns[name]; ok && rt != "" {
+				if s := g.schemaRef(rt); s != nil {
+					if m, ok := s["type"]; !ok || m != nil {
+						if _, hasRef := s["$ref"]; hasRef || s["type"] != nil {
+							return s
+						}
+					}
+				}
 			}
 		}
 		return map[string]any{}
