@@ -84,8 +84,9 @@ const analysisCacheTTL = 60 * time.Second
 
 // analysisCache 按租户缓存质量分析结果，并发安全。
 type analysisCache struct {
-	mu      sync.Mutex
-	entries map[int64]analysisEntry
+	mu         sync.Mutex
+	entries    map[int64]analysisEntry
+	refreshing map[int64]bool
 }
 
 type analysisEntry struct {
@@ -94,17 +95,39 @@ type analysisEntry struct {
 }
 
 func newAnalysisCache() *analysisCache {
-	return &analysisCache{entries: make(map[int64]analysisEntry)}
+	return &analysisCache{entries: make(map[int64]analysisEntry), refreshing: make(map[int64]bool)}
 }
 
-func (c *analysisCache) get(tenantID int64) (qualityAnalysis, bool) {
+// get 返回缓存结果及其是否已过期。
+//
+// 采用 stale-while-revalidate 语义：即使过期也把旧结果返回（stale=true），
+// 由调用方决定是否立即返回旧值并异步刷新。这样用户不会因为 TTL 到期
+// 而在请求路径上再等一次全量计算（实测约 5 秒）。
+func (c *analysisCache) get(tenantID int64) (qualityAnalysis, bool, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[tenantID]
-	if !ok || time.Now().After(e.expireAt) {
-		return qualityAnalysis{}, false
+	if !ok {
+		return qualityAnalysis{}, false, false
 	}
-	return e.analysis, true
+	return e.analysis, true, time.Now().After(e.expireAt)
+}
+
+// tryBeginRefresh 标记某租户正在刷新，避免并发重复计算。返回是否获取到刷新权。
+func (c *analysisCache) tryBeginRefresh(tenantID int64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.refreshing[tenantID] {
+		return false
+	}
+	c.refreshing[tenantID] = true
+	return true
+}
+
+func (c *analysisCache) endRefresh(tenantID int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.refreshing, tenantID)
 }
 
 func (c *analysisCache) put(tenantID int64, a qualityAnalysis) {
@@ -157,15 +180,24 @@ func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string,
 
 // loadAnalysis 拉取数据后在内存中计算质量指标。模型/属性为全局数据，
 // 实例/实例关系为租户作用域数据（按 tenantID 过滤）。
+// loadAnalysis 带缓存的入口。本函数是全量扫描（实测约 5s），故：
+//   - 无缓存     -> 同步计算（仅首次冷启动需要等待）
+//   - 未过期     -> 直接返回缓存
+//   - 已过期     -> 立即返回旧值，并异步刷新（用户不等待）
 func (s *qualityService) loadAnalysis(ctx context.Context, tenantID int64) (qualityAnalysis, error) {
-	// 命中缓存直接返回：本函数需全量拉取并遍历租户下所有实例，实测耗时约 5s，
-	// 而一次页面加载会调用多次，故按租户做短 TTL 缓存。
 	if s.cache != nil {
-		if a, ok := s.cache.get(tenantID); ok {
+		if a, ok, stale := s.cache.get(tenantID); ok {
+			if stale {
+				s.refreshAsync(tenantID)
+			}
 			return a, nil
 		}
 	}
+	return s.loadFresh(ctx, tenantID)
+}
 
+// loadFresh 实际执行一次全量分析并写入缓存（不含缓存读取）。
+func (s *qualityService) loadFresh(ctx context.Context, tenantID int64) (qualityAnalysis, error) {
 	models, err := s.modelRepo.List(ctx, domain.ModelFilter{})
 	if err != nil {
 		return qualityAnalysis{}, fmt.Errorf("list models: %w", err)
@@ -362,4 +394,21 @@ func selectIssues(issues []QualityIssue, typ string, offset, limit int) QualityI
 		Items: filtered[start:end],
 		Total: total,
 	}
+}
+
+// refreshAsync 后台刷新指定租户的分析结果（单飞，避免并发重复计算）。
+// 使用独立的 context：调用方请求可能已结束，不能让刷新随之取消。
+func (s *qualityService) refreshAsync(tenantID int64) {
+	if s.cache == nil || !s.cache.tryBeginRefresh(tenantID) {
+		return
+	}
+	go func() {
+		defer s.cache.endRefresh(tenantID)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if _, err := s.loadFresh(ctx, tenantID); err != nil {
+			// 刷新失败保留旧值，等待下次请求再试；不向上抛错，避免干扰当前请求。
+			return
+		}
+	}()
 }
