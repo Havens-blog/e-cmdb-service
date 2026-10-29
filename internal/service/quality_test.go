@@ -186,39 +186,62 @@ func TestSelectIssues_FilterAndPagination(t *testing.T) {
 	}
 }
 
-// TestAnalysisCache_HitAndExpire 验证质量分析缓存的基本语义：
-// 未写入时 miss、写入后命中、过期后再次 miss、不同租户互不影响。
-func TestAnalysisCache_HitAndExpire(t *testing.T) {
+// TestAnalysisCache_StaleWhileRevalidate 验证质量分析缓存的 stale 语义：
+// 未写入 miss；写入后命中且 stale=false；过期后仍返回旧值但标记 stale=true；
+// 不同租户互不影响；刷新标记单飞。
+func TestAnalysisCache_StaleWhileRevalidate(t *testing.T) {
 	c := newAnalysisCache()
 
-	if _, ok := c.get(3); ok {
+	if _, ok, _ := c.get(3); ok {
 		t.Fatal("empty cache should miss")
 	}
 
 	want := qualityAnalysis{totalInstances: 42, orphanCount: 7}
 	c.put(3, want)
 
-	got, ok := c.get(3)
+	got, ok, stale := c.get(3)
 	if !ok {
 		t.Fatal("expected cache hit after put")
+	}
+	if stale {
+		t.Fatal("fresh entry should not be stale")
 	}
 	if got.totalInstances != 42 || got.orphanCount != 7 {
 		t.Fatalf("cached value = %+v, want total=42 orphan=7", got)
 	}
 
 	// 不同租户不应命中
-	if _, ok := c.get(4); ok {
+	if _, ok, _ := c.get(4); ok {
 		t.Fatal("different tenant should miss")
 	}
 
-	// 手动把过期时间拨到过去，验证过期后 miss
+	// 把过期时间拨到过去：应仍能取到旧值，但标记 stale
 	c.mu.Lock()
 	e := c.entries[3]
 	e.expireAt = time.Now().Add(-time.Second)
 	c.entries[3] = e
 	c.mu.Unlock()
 
-	if _, ok := c.get(3); ok {
-		t.Fatal("expired entry should miss")
+	got, ok, stale = c.get(3)
+	if !ok {
+		t.Fatal("stale entry should still be served")
+	}
+	if !stale {
+		t.Fatal("expired entry should be marked stale")
+	}
+	if got.orphanCount != 7 {
+		t.Fatalf("stale value = %+v, want orphan=7", got)
+	}
+
+	// 单飞：同一租户并发刷新时只有一个能拿到刷新权
+	if !c.tryBeginRefresh(3) {
+		t.Fatal("first refresh should acquire")
+	}
+	if c.tryBeginRefresh(3) {
+		t.Fatal("concurrent refresh should be rejected")
+	}
+	c.endRefresh(3)
+	if !c.tryBeginRefresh(3) {
+		t.Fatal("refresh should be acquirable after release")
 	}
 }
