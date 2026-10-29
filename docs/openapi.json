@@ -2668,7 +2668,13 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "items": {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -2746,7 +2752,13 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "properties": {
+                        "relations": {},
+                        "total": {}
+                      },
+                      "type": "object"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -2845,7 +2857,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -2936,7 +2951,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/InstanceListResp"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3035,7 +3052,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3081,7 +3101,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/InstanceVO"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3599,7 +3621,13 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "properties": {
+                        "groups": {},
+                        "total": {}
+                      },
+                      "type": "object"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3698,7 +3726,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3744,7 +3775,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/InstanceVO"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3841,7 +3874,12 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "properties": {
+                        "message": {}
+                      },
+                      "type": "object"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3879,7 +3917,12 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "properties": {
+                        "groups": {}
+                      },
+                      "type": "object"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -3917,7 +3960,13 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "properties": {
+                        "relations": {},
+                        "total": {}
+                      },
+                      "type": "object"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4016,7 +4065,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4062,7 +4114,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/ModelRelationVO"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4159,7 +4213,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/ModelListResp"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4258,7 +4314,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4304,7 +4363,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/InstanceVO"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4411,7 +4472,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/AttributeGroup"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4528,7 +4591,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4582,7 +4648,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/AttributeGroupVO"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4697,7 +4765,13 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "properties": {
+                        "attributes": {},
+                        "total": {}
+                      },
+                      "type": "object"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4814,7 +4888,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4868,7 +4945,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/AttributeVO"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -4983,7 +5062,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/AttributeGroupWithAttrs"
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -5119,7 +5200,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -5258,7 +5342,10 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "description": "无返回数据",
+                      "nullable": true
+                    },
                     "msg": {
                       "type": "string"
                     }
@@ -5483,7 +5570,9 @@
                     "code": {
                       "type": "integer"
                     },
-                    "data": {},
+                    "data": {
+                      "$ref": "#/components/schemas/ModelTopologyGraph"
+                    },
                     "msg": {
                       "type": "string"
                     }
