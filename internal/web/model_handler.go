@@ -127,6 +127,10 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 	category := ctx.Query("category")
 	parentUID := ctx.Query("parent_uid")
 	levelStr := ctx.Query("level")
+	// model_group_id：按模型分组过滤。
+	// 此前该参数未被解析（filter.ModelGroupID 恒为 0，DAO 的过滤分支永不触发），
+	// 导致传任意分组都返回全部模型。此处补齐解析。
+	groupIDStr := ctx.Query("model_group_id")
 
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
@@ -136,13 +140,19 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 		level, _ = strconv.Atoi(levelStr)
 	}
 
+	var groupID int64
+	if groupIDStr != "" {
+		groupID, _ = strconv.ParseInt(groupIDStr, 10, 64)
+	}
+
 	filter := domain.ModelFilter{
-		Provider:  provider,
-		Category:  category,
-		ParentUID: parentUID,
-		Level:     level,
-		Offset:    offset,
-		Limit:     limit,
+		Provider:     provider,
+		Category:     category,
+		ParentUID:    parentUID,
+		Level:        level,
+		ModelGroupID: groupID,
+		Offset:       offset,
+		Limit:        limit,
 	}
 
 	models, total, err := h.svc.List(ctx.Request.Context(), filter)
