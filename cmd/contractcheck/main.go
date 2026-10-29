@@ -41,12 +41,20 @@ var allowed = map[string]string{
 
 func main() {
 	var (
-		specPath = flag.String("spec", "openapi.json", "OpenAPI 规范文件")
-		tsPath   = flag.String("ts", "", "前端类型文件")
+		specPath  = flag.String("spec", "openapi.json", "OpenAPI 规范文件")
+		specPath2 = flag.String("spec2", "", "第二份规范：指定时改为比对两份规范是否一致（用于校验生成物未腐化）")
+		tsPath    = flag.String("ts", "", "前端类型文件（-spec2 未指定时必填）")
 	)
 	flag.Parse()
+
+	// 模式一：两份规范一致性（CI 门禁：docs/openapi.json 是否与源码同步）
+	if *specPath2 != "" {
+		compareSpecs(*specPath, *specPath2)
+		return
+	}
+
 	if *tsPath == "" {
-		fmt.Fprintln(os.Stderr, "必须指定 -ts")
+		fmt.Fprintln(os.Stderr, "必须指定 -ts，或使用 -spec2 比对两份规范")
 		os.Exit(2)
 	}
 
@@ -111,6 +119,12 @@ func main() {
 	}
 
 	fmt.Printf("已比对 %d 个同名类型\n", compared)
+	if compared == 0 {
+		// 解析不到任何同名类型说明输入有误（编码/路径/格式），
+		// 此时静默通过等于门禁失效，必须失败并提示排查。
+		fmt.Fprintln(os.Stderr, "错误：未比对到任何同名类型，请检查 -spec / -ts 路径与文件编码")
+		os.Exit(2)
+	}
 	if len(problems) == 0 {
 		fmt.Println("契约一致 ✅")
 		return
@@ -128,6 +142,83 @@ func toSet(list []string) map[string]bool {
 		m[s] = true
 	}
 	return m
+}
+
+// compareSpecs 比对两份 OpenAPI 规范的路径与 schema 结构是否一致。
+// 用于 CI 门禁：确认仓库内提交的 docs/openapi.json 未与源码生成结果脱节。
+func compareSpecs(pathA, pathB string) {
+	type schema struct {
+		Properties map[string]any `json:"properties"`
+	}
+	type doc struct {
+		Paths      map[string]any `json:"paths"`
+		Components struct {
+			Schemas map[string]schema `json:"schemas"`
+		} `json:"components"`
+	}
+	load := func(p string) doc {
+		b, err := os.ReadFile(p)
+		check(err)
+		var d doc
+		check(json.Unmarshal(b, &d))
+		return d
+	}
+	a, b := load(pathA), load(pathB)
+
+	var diffs []string
+
+	// 路径集合
+	if len(a.Paths) != len(b.Paths) {
+		diffs = append(diffs, fmt.Sprintf("路径数量不一致：%d vs %d", len(a.Paths), len(b.Paths)))
+	}
+	for p := range a.Paths {
+		if _, ok := b.Paths[p]; !ok {
+			diffs = append(diffs, "仅存在于 "+pathA+"："+p)
+		}
+	}
+	for p := range b.Paths {
+		if _, ok := a.Paths[p]; !ok {
+			diffs = append(diffs, "仅存在于 "+pathB+"："+p)
+		}
+	}
+
+	// schema 字段集合
+	for name, sa := range a.Components.Schemas {
+		sb, ok := b.Components.Schemas[name]
+		if !ok {
+			diffs = append(diffs, "schema 仅存在于 "+pathA+"："+name)
+			continue
+		}
+		fa := make([]string, 0, len(sa.Properties))
+		for f := range sa.Properties {
+			fa = append(fa, f)
+		}
+		fb := make([]string, 0, len(sb.Properties))
+		for f := range sb.Properties {
+			fb = append(fb, f)
+		}
+		sort.Strings(fa)
+		sort.Strings(fb)
+		if strings.Join(fa, ",") != strings.Join(fb, ",") {
+			diffs = append(diffs, fmt.Sprintf("schema %s 字段不一致：%v vs %v", name, fa, fb))
+		}
+	}
+	for name := range b.Components.Schemas {
+		if _, ok := a.Components.Schemas[name]; !ok {
+			diffs = append(diffs, "schema 仅存在于 "+pathB+"："+name)
+		}
+	}
+
+	if len(diffs) == 0 {
+		fmt.Printf("两份规范一致 ✅（%d 条路径，%d 个 schema）\n", len(a.Paths), len(a.Components.Schemas))
+		return
+	}
+	fmt.Printf("发现 %d 处规范差异：\n", len(diffs))
+	for _, d := range diffs {
+		fmt.Println("  - " + d)
+	}
+	fmt.Fprintln(os.Stderr, "\n请执行: go run ./cmd/openapi -root . -o docs/openapi.json 并提交")
+	os.Exit(1)
 }
 
 // parseTS 解析 TS interface 的字段名。

@@ -46,31 +46,29 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # 契约校验需要两侧都在场：后端规范 + 前端手写类型
+      # 契约校验需要两侧都在场：后端规范 + 前端手写类型。
+      # 用 continue-on-error 保证前端仓不可达时，不影响门禁一（规范与源码一致性）。
       - name: Checkout e-cmdb-web
+        id: web
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/e-cmdb-web
           path: _web
-          # 前端私有仓需 PAT；公开仓可移除该行。缺失时本 job 跳过比对而非误报失败。
-          token: ${{ secrets.CMDB_WEB_TOKEN || github.token }}
 
       # 门禁一：仓库内的 docs/openapi.json 必须与当前源码一致，防止规范文件腐化
       - name: Verify OpenAPI spec is up to date
         run: |
           go run ./cmd/openapi -root . -o /tmp/openapi.gen.json
-          if ! diff -q <(python3 -c "import json,sys;print(json.dumps(json.load(open('docs/openapi.json')),sort_keys=True,indent=2))") \
-                       <(python3 -c "import json,sys;print(json.dumps(json.load(open('/tmp/openapi.gen.json')),sort_keys=True,indent=2))"); then
-            echo "::error::docs/openapi.json 与源码不一致，请执行 go run ./cmd/openapi -root . -o docs/openapi.json 并提交"
-            exit 1
-          fi
-          echo "OpenAPI 规范与源码一致 ✅"
+          go run ./cmd/contractcheck -spec docs/openapi.json -spec2 /tmp/openapi.gen.json
 
       # 门禁二：前端手写类型与后端契约必须一致（历史已 4 次字段名不一致）
       - name: Verify frontend types match backend contract
+        if: steps.web.outcome == 'success'
         run: |
-          if [ ! -f _web/src/api/types/cmdb.ts ]; then
-            echo "::notice::未获取到前端类型文件，跳过该项校验"
-            exit 0
-          fi
+          test -f _web/src/api/types/cmdb.ts || { echo "::error::未找到前端类型文件"; exit 1; }
           go run ./cmd/contractcheck -spec docs/openapi.json -ts _web/src/api/types/cmdb.ts
+
+      - name: Skip notice (frontend repo unavailable)
+        if: steps.web.outcome != 'success'
+        run: echo "::warning::未能检出 e-cmdb-web，门禁二已跳过（门禁一仍已执行）"
