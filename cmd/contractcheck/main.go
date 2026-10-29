@@ -223,11 +223,24 @@ func compareSpecs(pathA, pathB string) {
 
 // parseTS 解析 TS interface 的字段名。
 func parseTS(src string) map[string][]string {
-	out := map[string][]string{}
-	re := regexp.MustCompile(`(?s)export\s+interface\s+(\w+)[^{]*\{(.*?)\n\}`)
+	own := map[string][]string{}
+	extends := map[string][]string{}
+	re := regexp.MustCompile(`(?s)export\s+interface\s+(\w+)([^{]*)\{(.*?)\n\}`)
 	for _, m := range re.FindAllStringSubmatch(src, -1) {
 		name := m[1]
-		body := m[2]
+		header := m[2]
+		body := m[3]
+
+		// 记录 extends 的父类型：TS 的 interface 继承会把父字段算作自身字段，
+		// 若只看 own fields 会漏掉继承字段，导致与后端展开后的 schema 误报差异。
+		if em := regexp.MustCompile(`extends\s+([\w\s,]+)`).FindStringSubmatch(header); len(em) > 1 {
+			for _, p := range strings.Split(em[1], ",") {
+				if p = strings.TrimSpace(p); p != "" {
+					extends[name] = append(extends[name], p)
+				}
+			}
+		}
+
 		var fields []string
 		for _, line := range strings.Split(body, "\n") {
 			trimmed := strings.TrimSpace(line)
@@ -239,7 +252,26 @@ func parseTS(src string) map[string][]string {
 				fields = append(fields, fm[1])
 			}
 		}
-		out[name] = fields
+		own[name] = fields
+	}
+
+	// 递归合并继承字段（带环防护）
+	out := map[string][]string{}
+	var resolve func(string, map[string]bool) []string
+	resolve = func(n string, seen map[string]bool) []string {
+		if seen[n] {
+			return nil
+		}
+		seen[n] = true
+		var acc []string
+		for _, p := range extends[n] {
+			acc = append(acc, resolve(p, seen)...)
+		}
+		acc = append(acc, own[n]...)
+		return acc
+	}
+	for n := range own {
+		out[n] = resolve(n, map[string]bool{})
 	}
 	return out
 }
