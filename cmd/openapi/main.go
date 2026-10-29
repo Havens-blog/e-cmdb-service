@@ -807,8 +807,22 @@ func (g *Gen) schemaRef(goType string) Schema {
 }
 
 func (g *Gen) buildSchemas() map[string]any {
+	// 只输出「前端契约相关」的 schema：
+	//   - web 层传输类型（*VO / *Req / *Resp 等）
+	//   - 以及被它们 $ref 引用到的其它层类型（domain 实体等），否则引用会断
+	// 目的是让内部实现类型（handler/service 结构体、私有缓存类型等）的增删
+	// 不影响契约比对——否则重构内部实现就会误报契约漂移。
+	keep := g.referencedTypes()
+
 	out := map[string]any{}
 	for name, def := range g.structs {
+		// Handler 结构体只承载依赖注入，不是传输结构，不进契约
+		if strings.HasSuffix(name, "Handler") {
+			continue
+		}
+		if def.Layer != "web" && !keep[name] {
+			continue
+		}
 		props := map[string]any{}
 		var required []string
 		// 先展开匿名嵌入（Go 的 embedding 会把父结构字段提升到子结构 JSON 中）
@@ -849,4 +863,42 @@ func (g *Gen) flattenFields(def *StructDef, seen map[string]bool) []Field {
 	}
 	out = append(out, def.Fields...)
 	return out
+}
+
+// referencedTypes 返回被 web 层类型（含传递闭包）引用到的类型名集合。
+func (g *Gen) referencedTypes() map[string]bool {
+	keep := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if keep[name] {
+			return
+		}
+		def, ok := g.structs[name]
+		if !ok {
+			return
+		}
+		keep[name] = true
+		seen := map[string]bool{}
+		for _, f := range g.flattenFields(def, seen) {
+			walk(baseTypeName(f.GoType))
+		}
+	}
+	for name, def := range g.structs {
+		if def.Layer == "web" {
+			walk(name)
+		}
+	}
+	return keep
+}
+
+// baseTypeName 从 Go 类型表达式取基础类型名（去掉指针/切片/包前缀）。
+func baseTypeName(goType string) string {
+	s := strings.TrimPrefix(goType, "*")
+	for strings.HasPrefix(s, "[]") {
+		s = strings.TrimPrefix(s, "[]")
+	}
+	if dot := strings.LastIndex(s, "."); dot >= 0 {
+		s = s[dot+1:]
+	}
+	return s
 }

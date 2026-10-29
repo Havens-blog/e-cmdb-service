@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
+	"time"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
@@ -66,6 +68,49 @@ type qualityService struct {
 	modelRepo    repository.ModelRepository
 	relationRepo repository.InstanceRelationRepository
 	attrRepo     repository.AttributeRepository
+	cache        *analysisCache
+}
+
+// analysisCacheTTL 质量分析结果缓存时长。
+//
+// 背景：loadAnalysis 会把租户下全部实例（实测 2 万余条）拉入内存逐条判定，
+// 单次约 5 秒。而前端「数据质量」页一次加载会依次请求 overview 与 issues，
+// 每次都要重算，导致每个请求都等 5 秒。
+// 缓存后同一租户在 TTL 内只算一次，其余请求直接命中。
+//
+// 取值权衡：质量数据来源于定期同步，秒级实时性要求低；60 秒既能让页面
+// 连续操作几乎免等待，又保证新增/变更数据最迟 1 分钟内可见。
+const analysisCacheTTL = 60 * time.Second
+
+// analysisCache 按租户缓存质量分析结果，并发安全。
+type analysisCache struct {
+	mu      sync.Mutex
+	entries map[int64]analysisEntry
+}
+
+type analysisEntry struct {
+	analysis qualityAnalysis
+	expireAt time.Time
+}
+
+func newAnalysisCache() *analysisCache {
+	return &analysisCache{entries: make(map[int64]analysisEntry)}
+}
+
+func (c *analysisCache) get(tenantID int64) (qualityAnalysis, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[tenantID]
+	if !ok || time.Now().After(e.expireAt) {
+		return qualityAnalysis{}, false
+	}
+	return e.analysis, true
+}
+
+func (c *analysisCache) put(tenantID int64, a qualityAnalysis) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[tenantID] = analysisEntry{analysis: a, expireAt: time.Now().Add(analysisCacheTTL)}
 }
 
 // NewQualityService 创建数据质量服务。
@@ -80,6 +125,7 @@ func NewQualityService(
 		modelRepo:    modelRepo,
 		relationRepo: relationRepo,
 		attrRepo:     attrRepo,
+		cache:        newAnalysisCache(),
 	}
 }
 
@@ -112,6 +158,14 @@ func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string,
 // loadAnalysis 拉取数据后在内存中计算质量指标。模型/属性为全局数据，
 // 实例/实例关系为租户作用域数据（按 tenantID 过滤）。
 func (s *qualityService) loadAnalysis(ctx context.Context, tenantID int64) (qualityAnalysis, error) {
+	// 命中缓存直接返回：本函数需全量拉取并遍历租户下所有实例，实测耗时约 5s，
+	// 而一次页面加载会调用多次，故按租户做短 TTL 缓存。
+	if s.cache != nil {
+		if a, ok := s.cache.get(tenantID); ok {
+			return a, nil
+		}
+	}
+
 	models, err := s.modelRepo.List(ctx, domain.ModelFilter{})
 	if err != nil {
 		return qualityAnalysis{}, fmt.Errorf("list models: %w", err)
@@ -132,7 +186,11 @@ func (s *qualityService) loadAnalysis(ctx context.Context, tenantID int64) (qual
 		return qualityAnalysis{}, fmt.Errorf("list relations: %w", err)
 	}
 
-	return analyzeQuality(models, attrs, instances, relations), nil
+	result := analyzeQuality(models, attrs, instances, relations)
+	if s.cache != nil {
+		s.cache.put(tenantID, result)
+	}
+	return result, nil
 }
 
 // analyzeQuality 纯函数：输入已拉取的模型/属性/实例/关系列表，计算质量指标。
