@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 )
@@ -182,5 +183,42 @@ func TestSelectIssues_FilterAndPagination(t *testing.T) {
 	got = selectIssues(issues, "unknown", 0, 10)
 	if got.Total != 0 || len(got.Items) != 0 {
 		t.Fatalf("unknown type should be empty: %#v", got)
+	}
+}
+
+// TestAnalysisCache_HitAndExpire 验证质量分析缓存的基本语义：
+// 未写入时 miss、写入后命中、过期后再次 miss、不同租户互不影响。
+func TestAnalysisCache_HitAndExpire(t *testing.T) {
+	c := newAnalysisCache()
+
+	if _, ok := c.get(3); ok {
+		t.Fatal("empty cache should miss")
+	}
+
+	want := qualityAnalysis{totalInstances: 42, orphanCount: 7}
+	c.put(3, want)
+
+	got, ok := c.get(3)
+	if !ok {
+		t.Fatal("expected cache hit after put")
+	}
+	if got.totalInstances != 42 || got.orphanCount != 7 {
+		t.Fatalf("cached value = %+v, want total=42 orphan=7", got)
+	}
+
+	// 不同租户不应命中
+	if _, ok := c.get(4); ok {
+		t.Fatal("different tenant should miss")
+	}
+
+	// 手动把过期时间拨到过去，验证过期后 miss
+	c.mu.Lock()
+	e := c.entries[3]
+	e.expireAt = time.Now().Add(-time.Second)
+	c.entries[3] = e
+	c.mu.Unlock()
+
+	if _, ok := c.get(3); ok {
+		t.Fatal("expired entry should miss")
 	}
 }
