@@ -42,7 +42,8 @@ type StructDef struct {
 	Name   string
 	Fields []Field
 	Pkg    string
-	Layer  string // domain / service / web：仅 web 层类型进入前端契约
+	Layer  string   // domain / service / web：仅 web 层类型进入前端契约
+	Embeds []string // 匿名嵌入的类型名，字段需展开合并
 }
 
 type Route struct {
@@ -68,12 +69,13 @@ type Gen struct {
 
 func main() {
 	var (
-		rootDir  = flag.String("root", ".", "e-cmdb-service 仓库根目录")
-		outFile  = flag.String("o", "openapi.json", "输出 OpenAPI 文件")
-		basePath = flag.String("base", "/api/v1/cmdb", "路由公共前缀")
-		title    = flag.String("title", "e-cmdb-service API", "规范标题")
-		version  = flag.String("version", "1.0.0", "API 版本")
-		tsOut    = flag.String("ts-out", "", "可选：同时输出 TypeScript 类型文件（供前端直接使用）")
+		rootDir   = flag.String("root", ".", "e-cmdb-service 仓库根目录")
+		outFile   = flag.String("o", "openapi.json", "输出 OpenAPI 文件")
+		basePath  = flag.String("base", "/api/v1/cmdb", "路由公共前缀")
+		title     = flag.String("title", "e-cmdb-service API", "规范标题")
+		version   = flag.String("version", "1.0.0", "API 版本")
+		tsOut     = flag.String("ts-out", "", "可选：同时输出 TypeScript 类型文件（供前端直接使用）")
+		tsExclude = flag.String("ts-exclude", "", "可选：逗号分隔的类型名，生成 TS 时排除（用于前后端有已知设计差异的类型）")
 	)
 	flag.Parse()
 
@@ -103,7 +105,13 @@ func main() {
 
 	fmt.Printf("已生成 %s：%d 条路由，%d 个 schema\n", *outFile, len(g.routes), len(g.structs))
 	if *tsOut != "" {
-		must(writeTS(*tsOut, spec))
+		excl := map[string]bool{}
+		for _, n := range strings.Split(*tsExclude, ",") {
+			if n = strings.TrimSpace(n); n != "" {
+				excl[n] = true
+			}
+		}
+		must(writeTS(*tsOut, spec, excl))
 		fmt.Printf("已生成 TypeScript 类型：%s\n", *tsOut)
 	}
 }
@@ -138,22 +146,27 @@ func (g *Gen) scanDir(dir string) error {
 
 // jsonNameOf 解析 json tag，返回字段名与是否必填。
 // 必填判定：tag 不含 omitempty，且 Go 类型不是指针（指针语义上可空）。
-func jsonNameOf(f *ast.Field) (string, bool, bool) {
+func jsonNameOf(f *ast.Field, structName string) (string, bool, bool) {
 	name := ""
-	optional := false
+	required := false
 	if f.Tag != nil {
 		tag := strings.Trim(f.Tag.Value, "`")
 		if i := strings.Index(tag, `json:"`); i >= 0 {
 			rest := tag[i+6:]
 			if j := strings.Index(rest, `"`); j > 0 {
-				parts := strings.Split(rest[:j], ",")
-				name = parts[0]
-				for _, p := range parts[1:] {
-					if p == "omitempty" {
-						optional = true
-					}
-				}
+				name = strings.Split(rest[:j], ",")[0]
 			}
+		}
+		// 必填判定分两类语义（关键）：
+		//  - 请求类型（*Req）：只有 binding:"required" 才是必填。后端 gin 据此
+		//    拒绝请求；未标记的字段调用方不传也合法（缺 omitempty 并不代表必填）。
+		//  - 响应类型（*VO/*Resp/其它）：后端总是填充返回，字段应视为必填。
+		//    若在此也套用 binding 规则，会把所有响应字段都判成可选，
+		//    迫使前端到处写空值判断，反而失真。
+		if strings.Contains(tag, `binding:"required"`) {
+			required = true
+		} else if !strings.HasSuffix(structName, "Req") && !strings.Contains(tag, "omitempty") {
+			required = true
 		}
 	}
 	if name == "-" {
@@ -162,10 +175,11 @@ func jsonNameOf(f *ast.Field) (string, bool, bool) {
 	if name == "" && len(f.Names) > 0 {
 		name = f.Names[0].Name
 	}
+	// 指针语义可空
 	if _, isPtr := f.Type.(*ast.StarExpr); isPtr {
-		optional = true
+		required = false
 	}
-	return name, true, !optional
+	return name, true, required
 }
 
 func typeToString(e ast.Expr) string {
@@ -204,9 +218,17 @@ func (g *Gen) collectStructs(file *ast.File, pkg string) {
 		def := &StructDef{Name: ts.Name.Name, Pkg: pkg, Layer: g.layer}
 		for _, f := range st.Fields.List {
 			if len(f.Names) == 0 {
-				continue // 匿名字段忽略
+				// 匿名嵌入：记录类型名，稍后展开合并其字段
+				emb := strings.TrimPrefix(typeToString(f.Type), "*")
+				if dot := strings.LastIndex(emb, "."); dot >= 0 {
+					emb = emb[dot+1:]
+				}
+				if emb != "" {
+					def.Embeds = append(def.Embeds, emb)
+				}
+				continue
 			}
-			name, ok, required := jsonNameOf(f)
+			name, ok, required := jsonNameOf(f, ts.Name.Name)
 			if !ok {
 				continue
 			}
@@ -734,7 +756,9 @@ func (g *Gen) buildSchemas() map[string]any {
 	for name, def := range g.structs {
 		props := map[string]any{}
 		var required []string
-		for _, f := range def.Fields {
+		// 先展开匿名嵌入（Go 的 embedding 会把父结构字段提升到子结构 JSON 中）
+		seen := map[string]bool{}
+		for _, f := range g.flattenFields(def, seen) {
 			props[f.JSONName] = g.schemaRef(f.GoType)
 			if f.Required {
 				required = append(required, f.JSONName)
@@ -752,5 +776,22 @@ func (g *Gen) buildSchemas() map[string]any {
 		}
 		out[name] = s
 	}
+	return out
+}
+
+// flattenFields 递归展开匿名嵌入的字段（Go embedding 语义：父结构字段被提升）。
+// seen 用于防止自引用/环导致无限递归。
+func (g *Gen) flattenFields(def *StructDef, seen map[string]bool) []Field {
+	if def == nil || seen[def.Name] {
+		return nil
+	}
+	seen[def.Name] = true
+	var out []Field
+	for _, emb := range def.Embeds {
+		if e, ok := g.structs[emb]; ok {
+			out = append(out, g.flattenFields(e, seen)...)
+		}
+	}
+	out = append(out, def.Fields...)
 	return out
 }

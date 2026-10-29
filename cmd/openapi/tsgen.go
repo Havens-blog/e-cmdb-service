@@ -18,7 +18,7 @@ import (
 )
 
 // tsGen 从规范 JSON 生成 TS 源码。
-func tsGen(spec map[string]any) string {
+func tsGen(spec map[string]any, exclude map[string]bool) string {
 	var b strings.Builder
 
 	b.WriteString("/* eslint-disable */\n")
@@ -36,6 +36,9 @@ func tsGen(spec map[string]any) string {
 
 	for _, n := range names {
 		if !isFrontendType(n) {
+			continue
+		}
+		if exclude[n] {
 			continue
 		}
 		s, _ := schemas[n].(map[string]any)
@@ -178,6 +181,6 @@ func tsTypeOf(s map[string]any) string {
 }
 
 // writeTS 输出 TS 文件。
-func writeTS(path string, spec map[string]any) error {
-	return os.WriteFile(path, []byte(tsGen(spec)), 0o644)
+func writeTS(path string, spec map[string]any, exclude map[string]bool) error {
+	return os.WriteFile(path, []byte(tsGen(spec, exclude)), 0o644)
 }
