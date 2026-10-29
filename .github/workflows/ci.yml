@@ -32,3 +32,43 @@ jobs:
 
       - name: go build
         run: go build ./...
+
+  contract:
+    name: Contract Check (OpenAPI vs 前端类型)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout e-cmdb-service
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # 契约校验需要两侧都在场：后端规范 + 前端手写类型。
+      # 用 continue-on-error 保证前端仓不可达时，不影响门禁一（规范与源码一致性）。
+      - name: Checkout e-cmdb-web
+        id: web
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/e-cmdb-web
+          path: _web
+
+      # 门禁一：仓库内的 docs/openapi.json 必须与当前源码一致，防止规范文件腐化
+      - name: Verify OpenAPI spec is up to date
+        run: |
+          go run ./cmd/openapi -root . -o /tmp/openapi.gen.json
+          go run ./cmd/contractcheck -spec docs/openapi.json -spec2 /tmp/openapi.gen.json
+
+      # 门禁二：前端手写类型与后端契约必须一致（历史已 4 次字段名不一致）
+      - name: Verify frontend types match backend contract
+        if: steps.web.outcome == 'success'
+        run: |
+          test -f _web/src/api/types/cmdb.ts || { echo "::error::未找到前端类型文件"; exit 1; }
+          go run ./cmd/contractcheck -spec docs/openapi.json -ts _web/src/api/types/cmdb.ts
+
+      - name: Skip notice (frontend repo unavailable)
+        if: steps.web.outcome != 'success'
+        run: echo "::warning::未能检出 e-cmdb-web，门禁二已跳过（门禁一仍已执行）"
