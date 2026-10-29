@@ -2821,44 +2821,6 @@
         ]
       }
     },
-    "/api/v1/cmdb/internal/instances/list": {
-      "get": {
-        "operationId": "get_ListInstances",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "code": {
-                      "type": "integer"
-                    },
-                    "data": {},
-                    "msg": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            },
-            "description": "成功"
-          },
-          "400": {
-            "description": "参数错误"
-          },
-          "401": {
-            "description": "未认证"
-          },
-          "500": {
-            "description": "服务端错误"
-          }
-        },
-        "tags": [
-          "internal"
-        ]
-      }
-    },
     "/api/v1/cmdb/internal/instances/unbound": {
       "get": {
         "operationId": "get_ListUnbound",
