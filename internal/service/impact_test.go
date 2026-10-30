@@ -414,6 +414,11 @@ func (f *impactInstanceRepo) GroupOrphanInstancesByModel(ctx context.Context, te
 	return nil, nil
 }
 
+// BatchCountMissingFieldGroups 桩实现：数据质量缺失字段批量统计（测试中不使用）。
+func (f *impactInstanceRepo) BatchCountMissingFieldGroups(ctx context.Context, tenantID int64, fieldsByModel map[string][]string) (map[string]map[string]int64, error) {
+	return nil, nil
+}
+
 // ListOrphanInstances 桩实现：数据质量孤儿明细（测试中不使用）。
 func (f *impactInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {
 	return nil, 0, nil

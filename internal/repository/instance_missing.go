@@ -45,3 +45,21 @@ func toMissingFieldView(r dao.MissingFieldInstance) MissingFieldInstanceView {
 		ModelUID:  r.ModelUID,
 	}
 }
+
+// BatchCountMissingFieldGroups 一次聚合算出多个 (模型,字段) 组合的缺失实例数。
+// 返回：model_uid -> (field_uid -> 缺失数)，仅含 count > 0 的字段。
+func (r *instanceRepository) BatchCountMissingFieldGroups(
+	ctx context.Context,
+	tenantID int64,
+	fieldsByModel map[string][]string,
+) (map[string]map[string]int64, error) {
+	raw, err := r.dao.BatchCountMissingFieldGroups(ctx, tenantID, fieldsByModel)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]map[string]int64, len(raw))
+	for modelUID, item := range raw {
+		out[modelUID] = item.Counts
+	}
+	return out, nil
+}

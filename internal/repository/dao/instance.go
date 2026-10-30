@@ -83,6 +83,8 @@ type InstanceDAO interface {
 	GroupOrphanInstancesByModel(ctx context.Context, tenantID int64, knownModelUIDs []string) ([]OrphanGroupCount, error)
 	// CountMissingFieldGroup 统计某 (模型,字段) 组合缺该属性的实例数
 	CountMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error)
+	// BatchCountMissingFieldGroups 一次聚合算出多个 (模型,字段) 组合的缺失实例数
+	BatchCountMissingFieldGroups(ctx context.Context, tenantID int64, fieldsByModel map[string][]string) (map[string]MissingFieldCountsByModel, error)
 	// ListMissingFieldGroup 分页拉取某 (模型,字段) 组合缺该属性的实例
 	ListMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string, offset, limit int64) ([]MissingFieldInstance, error)
 	// CountMissingAttribute 统计某模型下缺少指定属性的实例数（服务端过滤）
