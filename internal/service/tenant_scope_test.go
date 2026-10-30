@@ -70,6 +70,17 @@ func (f *fakeInstanceRepo) ListByIDs(ctx context.Context, ids []int64, tenantID 
 func (f *fakeInstanceRepo) Count(ctx context.Context, filter domain.InstanceFilter) (int64, error) {
 	return 0, nil
 }
+
+// CountByModelUID 桩实现：数据质量服务端的按模型计数（测试中不使用）
+func (f *fakeInstanceRepo) CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+
+// CountMissingAttribute 桩实现：数据质量服务端的缺失字段计数（测试中不使用）
+func (f *fakeInstanceRepo) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
+	return 0, nil
+}
+
 func (f *fakeInstanceRepo) Delete(ctx context.Context, tenantID int64, id int64) error {
 	f.deletedTenant = tenantID
 	f.deletedID = id
