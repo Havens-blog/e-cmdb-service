@@ -55,6 +55,13 @@ type qualityAnalysis struct {
 	danglingRelationCount int
 	healthScore           float64
 	issues                []QualityIssue
+
+	// countsOnly 表示该结果只包含计数字段、successfully 不含 issues 明细。
+	//
+	// 由 overviewByCount（服务端计数快路径）写入缓存时置为 true。
+	// 使用方必须检查：Issues 若读到 countsOnly 条目，应回退全量分析，
+	// 否则会返回空列表（曾因此出现「概览 4447、明细 0 条」的口径矛盾）。
+	countsOnly bool
 }
 
 // QualityService 数据质量服务接口。
@@ -265,22 +272,37 @@ func (s *qualityService) overviewByCount(ctx context.Context, tenantID int64) (Q
 	}
 
 	if s.cache != nil {
+		// 标记为「仅计数」：Issues 读到这种条目必须回退全量分析，
+		// 否则会因 issues 为空而返回 0 条明细。
 		s.cache.put(tenantID, qualityAnalysis{
 			totalInstances:        ov.TotalInstances,
 			orphanCount:           ov.OrphanCount,
 			missingFieldCount:     ov.MissingFieldCount,
 			danglingRelationCount: ov.DanglingRelationCount,
 			healthScore:           ov.HealthScore,
+			countsOnly:            true,
 		})
 	}
 	return ov, true, nil
 }
 
 // Issues 返回指定类型的数据质量问题列表，支持分页。
+//
+// 注意：若缓存中是 overviewByCount 写入的「仅计数」条目（countsOnly=true），
+// 其 issues 为空，不能直接用于明细查询，必须回退一次全量分析
+// （loadFresh 会把完整结果写回缓存，后续请求即可命中）。
+// 历史缺陷：曾直接复用仅计数条目，导致「概览 4447、明细 0 条」。
 func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string, offset, limit int) (QualityIssuesResult, error) {
 	a, err := s.loadAnalysis(ctx, tenantID)
 	if err != nil {
 		return QualityIssuesResult{}, err
+	}
+
+	if needsFullAnalysisForIssues(a) {
+		a, err = s.loadFresh(ctx, tenantID)
+		if err != nil {
+			return QualityIssuesResult{}, err
+		}
 	}
 
 	return selectIssues(a.issues, typ, offset, limit), nil
@@ -519,4 +541,13 @@ func (s *qualityService) refreshAsync(tenantID int64) {
 			return
 		}
 	}()
+}
+
+// needsFullAnalysisForIssues 判断给定分析结果能否直接用于明细查询。
+//
+// 概览快路径只写入计数字段（countsOnly=true），其 issues 为空，
+// 直接用于明细会返回 0 条 —— 曾导致「概览 4447、明细 0 条」的口径矛盾。
+// 抽出为纯函数便于单测覆盖。
+func needsFullAnalysisForIssues(a qualityAnalysis) bool {
+	return a.countsOnly
 }
