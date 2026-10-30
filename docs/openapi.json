@@ -4229,6 +4229,46 @@
         ]
       }
     },
+    "/api/v1/cmdb/quality/orphan-sources": {
+      "get": {
+        "operationId": "get_OrphanSources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrphanSourceResult"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "quality"
+        ]
+      }
+    },
     "/api/v1/cmdb/quality/overview": {
       "get": {
         "operationId": "get_Overview",
