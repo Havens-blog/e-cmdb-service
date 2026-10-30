@@ -245,3 +245,33 @@ func TestAnalysisCache_StaleWhileRevalidate(t *testing.T) {
 		t.Fatal("refresh should be acquirable after release")
 	}
 }
+
+// TestNeedsFullAnalysisForIssues 锁定「概览仅计数条目不能直接用于明细」的回归。
+//
+// 背景：overviewByCount 走服务端计数后把 countsOnly=true 的条目写入缓存，
+// 若 Issues 直接复用，会因 issues 为空而返回 0 条明细，
+// 出现「概览 orphan=4447、明细 total=0」的口径矛盾（该缺陷已实际发生）。
+func TestNeedsFullAnalysisForIssues(t *testing.T) {
+	t.Run("仅计数条目需要回退全量分析", func(t *testing.T) {
+		a := qualityAnalysis{orphanCount: 4447, countsOnly: true}
+		if !needsFullAnalysisForIssues(a) {
+			t.Fatal("countsOnly 条目应判定为需要全量分析")
+		}
+	})
+
+	t.Run("全量分析结果可直接使用", func(t *testing.T) {
+		a := qualityAnalysis{
+			orphanCount: 1,
+			issues:      []QualityIssue{{Type: QualityIssueTypeOrphan}},
+		}
+		if needsFullAnalysisForIssues(a) {
+			t.Fatal("完整结果不应触发回退")
+		}
+	})
+
+	t.Run("零值结果不需要回退", func(t *testing.T) {
+		if needsFullAnalysisForIssues(qualityAnalysis{}) {
+			t.Fatal("零值（非 countsOnly）不应触发回退")
+		}
+	})
+}
