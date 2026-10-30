@@ -288,11 +288,19 @@ func (s *qualityService) overviewByCount(ctx context.Context, tenantID int64) (Q
 
 // Issues 返回指定类型的数据质量问题列表，支持分页。
 //
-// 注意：若缓存中是 overviewByCount 写入的「仅计数」条目（countsOnly=true），
-// 其 issues 为空，不能直接用于明细查询，必须回退一次全量分析
-// （loadFresh 会把完整结果写回缓存，后续请求即可命中）。
+// 取数策略：
+//   - orphan_instance：判定条件可完全下推到 Mongo，直接按页查询
+//     （实测首页约 70ms，相比全量分析约 5.4s）
+//   - 其它类型：走缓存的分析结果；若缓存是 overviewByCount 写入的
+//     「仅计数」条目（countsOnly=true），其 issues 为空，必须回退一次全量分析
+//     （loadFresh 会把完整结果写回缓存，后续请求即可命中）
+//
 // 历史缺陷：曾直接复用仅计数条目，导致「概览 4447、明细 0 条」。
 func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string, offset, limit int) (QualityIssuesResult, error) {
+	if typ == QualityIssueTypeOrphan {
+		return s.issuesOrphanByPushdown(ctx, tenantID, offset, limit)
+	}
+
 	a, err := s.loadAnalysis(ctx, tenantID)
 	if err != nil {
 		return QualityIssuesResult{}, err
