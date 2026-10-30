@@ -100,6 +100,15 @@ func (f *semanticInstanceRepo) Count(ctx context.Context, filter domain.Instance
 	return f.count, f.countErr
 }
 
+// CountByModelUID 桩实现：数据质量服务端的按模型计数（测试中不使用）
+func (f *semanticInstanceRepo) CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+
+// CountMissingAttribute 桩实现：数据质量服务端的缺失字段计数（测试中不使用）
+func (f *semanticInstanceRepo) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
+	return 0, nil
+}
 func (f *semanticInstanceRepo) Delete(ctx context.Context, tenantID int64, id int64) error {
 	return nil
 }

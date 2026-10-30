@@ -19,6 +19,10 @@ type InstanceRepository interface {
 	List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, error)
 	ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error)
 	Count(ctx context.Context, filter domain.InstanceFilter) (int64, error)
+	// CountByModelUID 按 model_uid 分组统计租户下实例数量（服务端聚合）
+	CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error)
+	// CountMissingAttribute 统计某模型下缺少指定属性的实例数（服务端过滤）
+	CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance domain.Instance) error
@@ -111,6 +115,16 @@ func (r *instanceRepository) List(ctx context.Context, filter domain.InstanceFil
 
 func (r *instanceRepository) Count(ctx context.Context, filter domain.InstanceFilter) (int64, error) {
 	return r.dao.Count(ctx, r.toDAOFilter(filter))
+}
+
+// CountByModelUID 按 model_uid 分组统计租户下实例数量。
+func (r *instanceRepository) CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error) {
+	return r.dao.CountByModelUID(ctx, tenantID)
+}
+
+// CountMissingAttribute 统计某模型下缺少指定属性的实例数。
+func (r *instanceRepository) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
+	return r.dao.CountMissingAttribute(ctx, tenantID, modelUID, fieldUID)
 }
 
 func (r *instanceRepository) Delete(ctx context.Context, tenantID int64, id int64) error {
