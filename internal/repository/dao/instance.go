@@ -79,6 +79,8 @@ type InstanceDAO interface {
 	CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error)
 	// ListOrphanInstances 分页拉取孤儿实例
 	ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]OrphanInstance, int64, error)
+	// GroupOrphanInstancesByModel 按 model_uid 聚合统计孤儿实例数，按数量降序
+	GroupOrphanInstancesByModel(ctx context.Context, tenantID int64, knownModelUIDs []string) ([]OrphanGroupCount, error)
 	// CountMissingFieldGroup 统计某 (模型,字段) 组合缺该属性的实例数
 	CountMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error)
 	// ListMissingFieldGroup 分页拉取某 (模型,字段) 组合缺该属性的实例

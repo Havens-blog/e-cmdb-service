@@ -264,6 +264,10 @@ func TestRelationCreate_CrossTenantNoConflict(t *testing.T) {
 func (f *semanticInstanceRepo) CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error) {
 	return 0, nil
 }
+// GroupOrphanInstancesByModel 桩实现：数据质量孤儿来源聚合（测试中不使用）。
+func (f *semanticInstanceRepo) GroupOrphanInstancesByModel(ctx context.Context, tenantID int64, knownModelUIDs []string) ([]repository.OrphanModelGroup, error) {
+	return nil, nil
+}
 
 // ListOrphanInstances 桩实现：数据质量孤儿明细（测试中不使用）。
 func (f *semanticInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {

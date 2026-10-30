@@ -68,6 +68,8 @@ type qualityAnalysis struct {
 type QualityService interface {
 	Overview(ctx context.Context, tenantID int64) (QualityOverview, error)
 	Issues(ctx context.Context, tenantID int64, typ string, offset, limit int) (QualityIssuesResult, error)
+	// OrphanSources 按 model_uid 聚合孤儿实例来源（哪些模型缺失导致孤儿）
+	OrphanSources(ctx context.Context, tenantID int64) (OrphanSourceResult, error)
 }
 
 type qualityService struct {

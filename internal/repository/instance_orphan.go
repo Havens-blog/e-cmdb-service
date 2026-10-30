@@ -45,3 +45,26 @@ func toOrphanView(r dao.OrphanInstance) OrphanInstanceView {
 		ModelUID:  r.ModelUID,
 	}
 }
+
+// OrphanModelGroup 按缺失模型聚合的孤儿实例数（数据质量页「孤儿来源」用）。
+type OrphanModelGroup struct {
+	ModelUID string
+	Count    int64
+}
+
+// GroupOrphanInstancesByModel 按 model_uid 聚合孤儿实例数量，按数量降序。
+func (r *instanceRepository) GroupOrphanInstancesByModel(
+	ctx context.Context,
+	tenantID int64,
+	knownModelUIDs []string,
+) ([]OrphanModelGroup, error) {
+	rows, err := r.dao.GroupOrphanInstancesByModel(ctx, tenantID, knownModelUIDs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]OrphanModelGroup, len(rows))
+	for i, row := range rows {
+		out[i] = OrphanModelGroup{ModelUID: row.ModelUID, Count: row.Count}
+	}
+	return out, nil
+}
