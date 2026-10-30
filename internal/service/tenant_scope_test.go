@@ -325,3 +325,13 @@ func (f *fakeInstanceRepo) CountOrphanInstances(ctx context.Context, tenantID in
 func (f *fakeInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {
 	return nil, 0, nil
 }
+
+// CountMissingFieldGroup 桩实现：数据质量缺失字段分组计数（测试中不使用）。
+func (f *fakeInstanceRepo) CountMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
+	return 0, nil
+}
+
+// ListMissingFieldGroup 桩实现：数据质量缺失字段分组明细（测试中不使用）。
+func (f *fakeInstanceRepo) ListMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string, offset, limit int64) ([]repository.MissingFieldInstanceView, error) {
+	return nil, nil
+}

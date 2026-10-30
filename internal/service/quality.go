@@ -300,6 +300,9 @@ func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string,
 	if typ == QualityIssueTypeOrphan {
 		return s.issuesOrphanByPushdown(ctx, tenantID, offset, limit)
 	}
+	if typ == QualityIssueTypeMissingField {
+		return s.issuesMissingByPushdown(ctx, tenantID, offset, limit)
+	}
 
 	a, err := s.loadAnalysis(ctx, tenantID)
 	if err != nil {
