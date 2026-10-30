@@ -42,6 +42,7 @@ type AssetStatsResult struct {
 	Total       int64            `bson:"total"`
 	ByAssetType []AssetTypeCount `bson:"by_asset_type"`
 	ByProvider  []ProviderCount  `bson:"by_provider"`
+	ByBusiness  []BusinessCount  `bson:"by_business"`
 }
 
 // AssetTypeCount 按资产类型统计
@@ -53,6 +54,12 @@ type AssetTypeCount struct {
 // ProviderCount 按云厂商统计
 type ProviderCount struct {
 	Provider string `bson:"_id"`
+	Count    int64  `bson:"count"`
+}
+
+// BusinessCount 按业务线/BU 统计
+type BusinessCount struct {
+	Business string `bson:"_id"`
 	Count    int64  `bson:"count"`
 }
 
@@ -479,6 +486,21 @@ func (d *instanceDAO) AggregateAllStats(ctx context.Context, tenantID int64) (*A
 				bson.M{"$match": bson.M{"attributes.provider": bson.M{"$ne": nil}}},
 				bson.M{"$group": bson.M{"_id": "$attributes.provider", "count": bson.M{"$sum": 1}}},
 			},
+			"by_business": bson.A{
+				// 业务线标签 attributes.tags.cmdb-biz；缺失/空一律归「未标注」，
+				// 不把无标签资产静默吞掉。
+				bson.M{"$group": bson.M{
+					"_id": bson.M{"$cond": bson.A{
+						bson.M{"$in": bson.A{
+							bson.M{"$ifNull": bson.A{"$attributes.tags.cmdb-biz", ""}},
+							bson.A{"", nil},
+						}},
+						"未标注",
+						"$attributes.tags.cmdb-biz",
+					}},
+					"count": bson.M{"$sum": 1},
+				}},
+			},
 		}}},
 	}
 
@@ -494,12 +516,13 @@ func (d *instanceDAO) AggregateAllStats(ctx context.Context, tenantID int64) (*A
 		} `bson:"total"`
 		ByAssetType []AssetTypeCount `bson:"by_asset_type"`
 		ByProvider  []ProviderCount  `bson:"by_provider"`
+		ByBusiness  []BusinessCount  `bson:"by_business"`
 	}
 	if err := cursor.All(ctx, &results); err != nil {
 		return nil, err
 	}
 	if len(results) == 0 {
-		return &AssetStatsResult{ByAssetType: []AssetTypeCount{}, ByProvider: []ProviderCount{}}, nil
+		return &AssetStatsResult{ByAssetType: []AssetTypeCount{}, ByProvider: []ProviderCount{}, ByBusiness: []BusinessCount{}}, nil
 	}
 
 	r := results[0]
@@ -512,6 +535,7 @@ func (d *instanceDAO) AggregateAllStats(ctx context.Context, tenantID int64) (*A
 		Total:       total,
 		ByAssetType: r.ByAssetType,
 		ByProvider:  r.ByProvider,
+		ByBusiness:  r.ByBusiness,
 	}, nil
 }
 

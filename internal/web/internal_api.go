@@ -45,6 +45,7 @@ type StatsDTO struct {
 	Total       int64          `json:"total"`
 	ByAssetType []TypeCountDTO `json:"by_asset_type"`
 	ByProvider  []TypeCountDTO `json:"by_provider"`
+	ByBusiness  []TypeCountDTO `json:"by_business"`
 }
 
 // TypeCountDTO 分组计数。
@@ -66,6 +67,7 @@ func (h *InternalAPIHandler) RegisterRoutes(r *gin.RouterGroup) {
 	g := r.Group("/internal")
 	{
 		g.POST("/instances/batch-get", h.BatchGet)
+		g.GET("/instances/list", h.ListInstances)
 		g.GET("/instances/unbound", h.ListUnbound)
 		g.GET("/instances/unbound/count", h.CountUnbound)
 		g.POST("/stats/by-ids", h.StatsByIDs)
@@ -118,6 +120,41 @@ func (h *InternalAPIHandler) ListUnbound(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"instances": toInstanceDTOs(instances)})
+}
+
+// ListInstances 按模型/名称/云厂商列实例，供 opsagent 资源拓扑查询（CDN 域名、
+// 云资源清单）。租户由调用方显式传参（S2S 无会话租户）；model_uid 为空时按
+// asset_name 模糊匹配。provider 可选，过滤 attributes.provider（如 volcano/aliyun）。
+// limit 缺省 100、上限 500。
+func (h *InternalAPIHandler) ListInstances(c *gin.Context) {
+	modelUID := c.Query("model_uid")
+	assetName := c.Query("asset_name")
+	provider := c.Query("provider")
+	tenantID := queryInt64(c, "tenant_id")
+	limit := queryInt64(c, "limit")
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	filter := domain.InstanceFilter{
+		ModelUID:  modelUID,
+		AssetName: assetName,
+		TenantID:  tenantID,
+		Limit:     limit,
+	}
+	if provider != "" {
+		filter.Attributes = map[string]interface{}{"provider": provider}
+	}
+	instances, err := h.repo.List(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	total, err := h.repo.Count(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"instances": toInstanceDTOs(instances), "total": total})
 }
 
 // CountUnbound 统计未绑定实例数。

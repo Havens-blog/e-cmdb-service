@@ -30,6 +30,7 @@ func toStatsDTO(result *dao.AssetStatsResult) StatsDTO {
 		return StatsDTO{
 			ByAssetType: []TypeCountDTO{},
 			ByProvider:  []TypeCountDTO{},
+			ByBusiness:  []TypeCountDTO{},
 		}
 	}
 	byType := make([]TypeCountDTO, len(result.ByAssetType))
@@ -40,9 +41,14 @@ func toStatsDTO(result *dao.AssetStatsResult) StatsDTO {
 	for i, item := range result.ByProvider {
 		byProvider[i] = TypeCountDTO{Key: item.Provider, Count: item.Count}
 	}
+	byBusiness := make([]TypeCountDTO, len(result.ByBusiness))
+	for i, item := range result.ByBusiness {
+		byBusiness[i] = TypeCountDTO{Key: item.Business, Count: item.Count}
+	}
 	return StatsDTO{
 		Total:       result.Total,
 		ByAssetType: byType,
 		ByProvider:  byProvider,
+		ByBusiness:  byBusiness,
 	}
 }
