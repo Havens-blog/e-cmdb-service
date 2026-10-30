@@ -325,6 +325,11 @@ func (f *fakeInstanceRepo) GroupOrphanInstancesByModel(ctx context.Context, tena
 	return nil, nil
 }
 
+// BatchCountMissingFieldGroups 桩实现：数据质量缺失字段批量统计（测试中不使用）。
+func (f *fakeInstanceRepo) BatchCountMissingFieldGroups(ctx context.Context, tenantID int64, fieldsByModel map[string][]string) (map[string]map[string]int64, error) {
+	return nil, nil
+}
+
 // ListOrphanInstances 桩实现：数据质量孤儿明细（测试中不使用）。
 func (f *fakeInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {
 	return nil, 0, nil
