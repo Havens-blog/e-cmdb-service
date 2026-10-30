@@ -75,6 +75,10 @@ type InstanceDAO interface {
 	Count(ctx context.Context, filter InstanceFilter) (int64, error)
 	// CountByModelUID 按 model_uid 分组统计租户下实例数量（服务端聚合）
 	CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error)
+	// CountOrphanInstances 统计孤儿实例数量（model_uid 不在模型表）
+	CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error)
+	// ListOrphanInstances 分页拉取孤儿实例
+	ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]OrphanInstance, int64, error)
 	// CountMissingAttribute 统计某模型下缺少指定属性的实例数（服务端过滤）
 	CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error

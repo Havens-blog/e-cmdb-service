@@ -7,6 +7,7 @@ import (
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
+	"github.com/Havens-blog/e-cmdb-service/internal/repository"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository/dao"
 )
 
@@ -257,4 +258,14 @@ func TestRelationCreate_CrossTenantNoConflict(t *testing.T) {
 	if !repo.createCalled {
 		t.Fatalf("repo.Create should be called for cross-tenant relation")
 	}
+}
+
+// CountOrphanInstances 桩实现：数据质量孤儿统计（测试中不使用）。
+func (f *semanticInstanceRepo) CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error) {
+	return 0, nil
+}
+
+// ListOrphanInstances 桩实现：数据质量孤儿明细（测试中不使用）。
+func (f *semanticInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {
+	return nil, 0, nil
 }

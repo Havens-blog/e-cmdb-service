@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
+	"github.com/Havens-blog/e-cmdb-service/internal/repository"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository/dao"
 )
 
@@ -402,4 +403,14 @@ func TestImpactGetImpact_UpstreamDepthLimit(t *testing.T) {
 	if g.DownstreamCount != 0 {
 		t.Fatalf("downstream_count = %d, want 0", g.DownstreamCount)
 	}
+}
+
+// CountOrphanInstances 桩实现：数据质量孤儿统计（测试中不使用）。
+func (f *impactInstanceRepo) CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error) {
+	return 0, nil
+}
+
+// ListOrphanInstances 桩实现：数据质量孤儿明细（测试中不使用）。
+func (f *impactInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {
+	return nil, 0, nil
 }
