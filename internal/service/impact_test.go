@@ -409,6 +409,10 @@ func TestImpactGetImpact_UpstreamDepthLimit(t *testing.T) {
 func (f *impactInstanceRepo) CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error) {
 	return 0, nil
 }
+// GroupOrphanInstancesByModel 桩实现：数据质量孤儿来源聚合（测试中不使用）。
+func (f *impactInstanceRepo) GroupOrphanInstancesByModel(ctx context.Context, tenantID int64, knownModelUIDs []string) ([]repository.OrphanModelGroup, error) {
+	return nil, nil
+}
 
 // ListOrphanInstances 桩实现：数据质量孤儿明细（测试中不使用）。
 func (f *impactInstanceRepo) ListOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string, offset, limit int64) ([]repository.OrphanInstanceView, int64, error) {

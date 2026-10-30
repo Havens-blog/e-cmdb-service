@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -37,6 +38,48 @@ func orphanQuery(tenantID int64, knownModelUIDs []string) bson.M {
 // CountOrphanInstances 统计孤儿实例数量（服务端过滤）。
 func (d *instanceDAO) CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error) {
 	return d.db.Collection(InstanceCollection).CountDocuments(ctx, orphanQuery(tenantID, knownModelUIDs))
+}
+
+// OrphanGroupCount 按 model_uid 聚合的孤儿实例数。
+type OrphanGroupCount struct {
+	ModelUID string `bson:"_id"`
+	Count    int64  `bson:"count"`
+}
+
+// GroupOrphanInstancesByModel 按 model_uid 聚合统计孤儿实例数量。
+//
+// 用途：数据质量页当前只展示「孤儿实例总数」，用户无法得知这些孤儿
+// 究竟是因为哪些模型缺失造成的。实测（tenant 3，2026-10-31）：
+// 孤儿 12760 条，来自 58 个未定义的 model_uid，
+// 其中 volcengine_disk 1783、volcengine_snapshot 1491、aliyun_disk 1314 等。
+// 把总数拆成「按缺失模型分组」后，数字才变得可执行（知道该补哪些模型）。
+//
+// 复用 orphanQuery，保证与 CountOrphanInstances / ListOrphanInstances 口径一致。
+// 按数量降序，便于前端直接展示 TopN。
+func (d *instanceDAO) GroupOrphanInstancesByModel(
+	ctx context.Context,
+	tenantID int64,
+	knownModelUIDs []string,
+) ([]OrphanGroupCount, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: orphanQuery(tenantID, knownModelUIDs)}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$model_uid"},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}}}},
+	}
+	cur, err := d.db.Collection(InstanceCollection).Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cur.Close(ctx) }()
+
+	var out []OrphanGroupCount
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ListOrphanInstances 分页拉取孤儿实例，供数据质量明细接口使用。
