@@ -219,6 +219,12 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 	assetName := ctx.Query("asset_name")
 	status := ctx.Query("status")
 	region := ctx.Query("region")
+	// provider：云厂商。前端实例列表有「云平台」下拉框并传递该参数，
+	// 但此前后端未读取，导致筛选完全无效（实测 2026-10-31：
+	// provider=aliyun 与 provider=zzz-no-such 均返回全量 33047 条）。
+	// 云厂商在实例文档里是 attributes.provider 嵌套字段，
+	// 与 status / region 同属「动态属性过滤」，故一并放入 attributes。
+	provider := ctx.Query("provider")
 
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
@@ -234,6 +240,9 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 	}
 	if region != "" {
 		attributes["region"] = region
+	}
+	if provider != "" {
+		attributes["provider"] = provider
 	}
 
 	filter := domain.InstanceFilter{
