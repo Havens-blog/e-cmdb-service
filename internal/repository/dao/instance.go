@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	shareddomain "github.com/Havens-blog/e-cloudx-sdk/domain"
@@ -364,7 +365,20 @@ func (d *instanceDAO) buildQuery(filter InstanceFilter) bson.M {
 		query["account_id"] = filter.AccountID
 	}
 	if filter.AssetName != "" {
-		query["asset_name"] = bson.M{"$regex": filter.AssetName, "$options": "i"}
+		// 关键字同时匹配资产名称与资产 ID。
+		//
+		// 背景：前端实例列表搜索框的提示语是「搜索名称/ID」，但原实现只匹配
+		// asset_name。实测 2026-10-31：用真实 asset_id
+		//（sg-3u69qfp8b2ghs3ael9erqd68s）搜索返回 0 条 ——
+		// 即 UI 承诺了按 ID 搜索却不生效。
+		//
+		// 关键字做正则转义：避免用户输入的 . * ( ) 被当作正则元字符，
+		// 保证「按字面量搜索」的直觉语义，也避免构造出高开销正则。
+		pat := bson.M{"$regex": regexp.QuoteMeta(filter.AssetName), "$options": "i"}
+		query["$or"] = bson.A{
+			bson.M{"asset_name": pat},
+			bson.M{"asset_id": pat},
+		}
 	}
 
 	// 动态属性查询
