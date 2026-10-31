@@ -211,6 +211,7 @@ func (r *instanceRepository) toDAOFilter(filter domain.InstanceFilter) dao.Insta
 		TenantID:   filter.TenantID,
 		AccountID:  filter.AccountID,
 		AssetName:  filter.AssetName,
+		AssetID:    filter.AssetID,
 		Attributes: filter.Attributes,
 		Offset:     filter.Offset,
 		Limit:      filter.Limit,

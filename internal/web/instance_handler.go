@@ -225,6 +225,13 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 	// 云厂商在实例文档里是 attributes.provider 嵌套字段，
 	// 与 status / region 同属「动态属性过滤」，故一并放入 attributes。
 	provider := ctx.Query("provider")
+	// asset_id：资产 ID 精确匹配。
+	//
+	// 此前该参数**完全未被读取**，传了会被静默忽略并返回全量。
+	// 实测后果（2026-11-01）：调用方按 asset_id 定位单条记录后执行删除，
+	// 实际命中的是全量列表的前 N 条，造成 10 条真实实例被误删。
+	// 资产 ID 是唯一标识，支持精确匹配既符合直觉，也消除了这个陷阱。
+	assetID := ctx.Query("asset_id")
 
 	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
@@ -250,6 +257,7 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 		TenantID:   tenantID,
 		AccountID:  accountID,
 		AssetName:  assetName,
+		AssetID:    assetID,
 		Attributes: attributes,
 		Offset:     int64(offset),
 		Limit:      int64(limit),

@@ -29,10 +29,12 @@ type Instance struct {
 
 // InstanceFilter DAO层过滤条件
 type InstanceFilter struct {
-	ModelUID   string
-	TenantID   int64
-	AccountID  int64
-	AssetName  string
+	ModelUID  string
+	TenantID  int64
+	AccountID int64
+	AssetName string
+	// AssetID 按资产 ID 精确匹配（与 AssetName 的模糊搜索相互独立，可叠加为 AND）
+	AssetID    string
 	Attributes map[string]interface{}
 	Offset     int64
 	Limit      int64
@@ -363,6 +365,11 @@ func (d *instanceDAO) buildQuery(filter InstanceFilter) bson.M {
 	}
 	if filter.AccountID > 0 {
 		query["account_id"] = filter.AccountID
+	}
+	// asset_id 精确匹配：与 AssetName 的模糊搜索可叠加（AND）。
+	// 用于「按资产 ID 精确定位单条记录」的场景，避免调用方误以为筛选生效。
+	if filter.AssetID != "" {
+		query["asset_id"] = filter.AssetID
 	}
 	if filter.AssetName != "" {
 		// 关键字同时匹配资产名称与资产 ID。
