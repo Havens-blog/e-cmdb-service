@@ -21,10 +21,18 @@ type Instance struct {
 
 // InstanceFilter 实例过滤条件
 type InstanceFilter struct {
-	ModelUID   string                 // 按模型过滤
-	TenantID   int64                  // 按租户过滤
-	AccountID  int64                  // 按云账号过滤
-	AssetName  string                 // 按名称模糊搜索
+	ModelUID  string // 按模型过滤
+	TenantID  int64  // 按租户过滤
+	AccountID int64  // 按云账号过滤
+	AssetName string // 按名称模糊搜索
+	// AssetID 按资产 ID **精确匹配**。
+	//
+	// 背景（实测 2026-11-01）：实例列表接口此前**不读取** asset_id 查询参数，
+	// 传该参数会被静默忽略并返回全量数据。调用方若以为筛选已生效
+	// （例如用它定位单条记录后再做删改），会作用于远大于预期的集合。
+	// 资产 ID 是唯一标识，精确匹配才是符合直觉的语义；模糊搜索仍走 AssetName
+	// （其内部已同时对 asset_name 与 asset_id 做正则匹配）。
+	AssetID    string
 	Attributes map[string]interface{} // 按属性过滤
 	Offset     int64
 	Limit      int64
