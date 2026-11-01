@@ -34,8 +34,16 @@ type InstanceFilter struct {
 	// （其内部已同时对 asset_name 与 asset_id 做正则匹配）。
 	AssetID    string
 	Attributes map[string]interface{} // 按属性过滤
-	Offset     int64
-	Limit      int64
+	// SortBy 排序字段（白名单见 dao 层）。空表示使用默认排序（ctime 倒序）。
+	//
+	// 背景（实测 2026-11-01）：实例列表此前**完全不支持排序** ——
+	// 前端无列头排序 UI，后端 DAO 硬编码 `SetSort(ctime: -1)`，
+	// 用户只能按创建时间倒序查看，无法按名称/状态/区域等排序。
+	SortBy string
+	// SortDesc true 为降序。仅在 SortBy 非空时生效。
+	SortDesc bool
+	Offset   int64
+	Limit    int64
 }
 
 // Validate 验证实例数据

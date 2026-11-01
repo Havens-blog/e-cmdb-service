@@ -36,8 +36,51 @@ type InstanceFilter struct {
 	// AssetID 按资产 ID 精确匹配（与 AssetName 的模糊搜索相互独立，可叠加为 AND）
 	AssetID    string
 	Attributes map[string]interface{}
-	Offset     int64
-	Limit      int64
+	// SortBy 排序字段（须在 sortableFields 白名单内，否则回退默认排序）
+	SortBy   string
+	SortDesc bool
+	Offset   int64
+	Limit    int64
+}
+
+// sortableFields 允许排序的字段白名单。
+//
+// 只放行「实例文档上真实存在、且建了索引或可高效扫描」的字段：
+//   - id / ctime / utime / asset_id / asset_name / model_uid / account_id：顶层字段
+//   - attributes.xxx：动态属性（region / status / provider 等），
+//     由 buildQuery 的 attributes 过滤共用同一形态，可命中部分索引
+//
+// **不放行任意用户输入**：MongoDB 允许按任意键排序，那会触发内存排序（32MB 上限）
+// 甚至全集合扫描，且构成注入面。白名单外的字段一律回退默认排序。
+var sortableFields = map[string]bool{
+	"id":                       true,
+	"ctime":                    true,
+	"utime":                    true,
+	"asset_id":                 true,
+	"asset_name":               true,
+	"model_uid":                true,
+	"account_id":               true,
+	"attributes.region":        true,
+	"attributes.status":        true,
+	"attributes.provider":      true,
+	"attributes.zone":          true,
+	"attributes.os_type":       true,
+	"attributes.instance_type": true,
+}
+
+// buildSort 构造排序选项。SortBy 不在白名单时回退默认（ctime 倒序）。
+//
+// 方向统一用 int32：MongoDB 排序方向的标准类型，
+// 避免 int / int32 混用导致调用方断言或驱动序列化出现差异。
+func buildSort(filter InstanceFilter) bson.M {
+	if filter.SortBy != "" && sortableFields[filter.SortBy] {
+		dir := int32(1)
+		if filter.SortDesc {
+			dir = int32(-1)
+		}
+		return bson.M{filter.SortBy: dir}
+	}
+	return bson.M{"ctime": int32(-1)}
 }
 
 // AssetStatsResult 资产统计结果
@@ -235,7 +278,8 @@ func (d *instanceDAO) List(ctx context.Context, filter InstanceFilter) ([]Instan
 	if filter.Limit > 0 {
 		opts.SetLimit(filter.Limit)
 	}
-	opts.SetSort(bson.M{"ctime": -1})
+	// 排序：支持调用方指定（白名单校验），未指定时保持历史默认 ctime 倒序
+	opts.SetSort(buildSort(filter))
 
 	cursor, err := d.db.Collection(InstanceCollection).Find(ctx, query, opts)
 	if err != nil {
