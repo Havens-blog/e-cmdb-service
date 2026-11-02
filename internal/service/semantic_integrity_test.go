@@ -227,7 +227,7 @@ func TestModelDelete_NoInstances(t *testing.T) {
 
 func TestRelationCreate_SameTenantDuplicate(t *testing.T) {
 	repo := &semanticRelationRepo{existsTenant: 1, existsResult: true}
-	svc := NewRelationService(repo)
+	svc := NewRelationService(repo, nil)
 
 	_, err := svc.Create(context.Background(), domain.InstanceRelation{
 		SourceInstanceID: 1,
@@ -242,7 +242,7 @@ func TestRelationCreate_SameTenantDuplicate(t *testing.T) {
 
 func TestRelationCreate_CrossTenantNoConflict(t *testing.T) {
 	repo := &semanticRelationRepo{existsTenant: 1, existsResult: true, createID: 99}
-	svc := NewRelationService(repo)
+	svc := NewRelationService(repo, nil)
 
 	id, err := svc.Create(context.Background(), domain.InstanceRelation{
 		SourceInstanceID: 1,

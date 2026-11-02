@@ -266,7 +266,7 @@ func (f *fakeRelationRepo) Exists(ctx context.Context, tenantID int64, sourceID,
 func TestRelationServiceGetByID_TenantMismatch(t *testing.T) {
 	repo := newFakeRelationRepo()
 	repo.relations[10] = domain.InstanceRelation{ID: 10, TenantID: 100}
-	svc := NewRelationService(repo)
+	svc := NewRelationService(repo, nil)
 
 	_, err := svc.GetByID(context.Background(), 200, 10)
 	if !errors.Is(err, errs.ErrRelationNotFound) {
@@ -280,7 +280,7 @@ func TestRelationServiceGetByID_TenantMismatch(t *testing.T) {
 func TestRelationServiceDelete_TenantMismatch(t *testing.T) {
 	repo := newFakeRelationRepo()
 	repo.relations[10] = domain.InstanceRelation{ID: 10, TenantID: 100}
-	svc := NewRelationService(repo)
+	svc := NewRelationService(repo, nil)
 
 	err := svc.Delete(context.Background(), 200, 10)
 	if !errors.Is(err, errs.ErrRelationNotFound) {
@@ -294,7 +294,7 @@ func TestRelationServiceDelete_TenantMismatch(t *testing.T) {
 func TestRelationServiceDelete_TenantMatch(t *testing.T) {
 	repo := newFakeRelationRepo()
 	repo.relations[10] = domain.InstanceRelation{ID: 10, TenantID: 100}
-	svc := NewRelationService(repo)
+	svc := NewRelationService(repo, nil)
 
 	if err := svc.Delete(context.Background(), 100, 10); err != nil {
 		t.Fatalf("Delete error = %v", err)
@@ -306,7 +306,7 @@ func TestRelationServiceDelete_TenantMatch(t *testing.T) {
 
 func TestRelationServiceDeleteByInstanceID_ForwardsTenant(t *testing.T) {
 	repo := newFakeRelationRepo()
-	svc := NewRelationService(repo)
+	svc := NewRelationService(repo, nil)
 
 	if err := svc.DeleteByInstanceID(context.Background(), 100, 55); err != nil {
 		t.Fatalf("DeleteByInstanceID error = %v", err)
