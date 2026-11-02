@@ -76,7 +76,7 @@ func TestUpsertBatch_RecordButNotBlock(t *testing.T) {
 		}
 		sqRepo := &fakeSyncQualityIssueRepo{}
 
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo, nil)
 
 		// 缺 instance_id、status 值越界（running vs Running 大小写不同视为匹配，这里用非法值）
 		err := svc.UpsertBatch(context.Background(), []domain.Instance{
@@ -119,7 +119,7 @@ func TestUpsertBatch_RecordButNotBlock(t *testing.T) {
 		}
 		sqRepo := &fakeSyncQualityIssueRepo{}
 
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo, nil)
 		err := svc.UpsertBatch(context.Background(), []domain.Instance{
 			{ID: 101, TenantID: 3, ModelUID: "ecs", AssetID: "i-good", Attributes: map[string]interface{}{
 				"instance_id": "i-good",
@@ -142,7 +142,7 @@ func TestUpsertBatch_RecordButNotBlock(t *testing.T) {
 		}
 		sqRepo := &fakeSyncQualityIssueRepo{err: context.DeadlineExceeded}
 
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo, nil)
 		err := svc.UpsertBatch(context.Background(), []domain.Instance{
 			{ID: 102, TenantID: 3, ModelUID: "ecs", AssetID: "i-bad2", Attributes: map[string]interface{}{}},
 		})

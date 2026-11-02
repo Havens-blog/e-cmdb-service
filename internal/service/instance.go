@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -37,7 +38,10 @@ type instanceService struct {
 	// syncQualityIssueRepo 用于同步链路「记录但不阻断」：把字段校验问题写入
 	// 可查询的问题清单。允许为 nil（校验/记录退化为仅日志）。
 	syncQualityIssueRepo repository.SyncQualityIssueRepository
-	logger               *elog.Component
+	// changeHistoryRepo 用于实例变更审计（变更前后值写入 ecam_change_history）。
+	// 允许为 nil（审计退化为仅日志，绝不阻断业务操作）。
+	changeHistoryRepo repository.ChangeHistoryRepository
+	logger            *elog.Component
 }
 
 // NewInstanceService 创建实例服务
@@ -47,6 +51,7 @@ func NewInstanceService(
 	attrRepo repository.AttributeRepository,
 	relationRepo repository.InstanceRelationRepository,
 	syncQualityIssueRepo repository.SyncQualityIssueRepository,
+	changeHistoryRepo repository.ChangeHistoryRepository,
 ) InstanceService {
 	return &instanceService{
 		repo:                 repo,
@@ -54,6 +59,7 @@ func NewInstanceService(
 		attrRepo:             attrRepo,
 		relationRepo:         relationRepo,
 		syncQualityIssueRepo: syncQualityIssueRepo,
+		changeHistoryRepo:    changeHistoryRepo,
 		logger:               elog.DefaultLogger,
 	}
 }
@@ -175,7 +181,14 @@ func (s *instanceService) Create(ctx context.Context, instance domain.Instance) 
 		return 0, errs.ErrInstanceExists
 	}
 
-	return s.repo.Create(ctx, instance)
+	id, err := s.repo.Create(ctx, instance)
+	if err != nil {
+		return 0, err
+	}
+
+	// 创建审计：所有属性视为「新增」（OldValue 为空）
+	s.recordChanges(ctx, changeMetaFromInstance(instance, domain.ChangeSourceManual), nil, instance.Attributes)
+	return id, nil
 }
 
 func (s *instanceService) CreateBatch(ctx context.Context, instances []domain.Instance) (int64, error) {
@@ -197,6 +210,14 @@ func (s *instanceService) Update(ctx context.Context, tenantID int64, instance d
 		return errs.ErrInstanceNotFound
 	}
 
+	// 变更审计需要旧值做 diff，先读旧实例（失败不阻断更新，只是无审计）
+	var old domain.Instance
+	if s.changeHistoryRepo != nil {
+		if o, err := s.repo.GetByID(ctx, tenantID, instance.ID); err == nil {
+			old = o
+		}
+	}
+
 	// 更新：只做**非阻断**校验（blockRequired=false）。
 	// 存量 4132 条实例已缺失必填字段（如 ecs 的 instance_id/instance_name 在真实数据中
 	// 从不存在，数据用 asset_id/asset_name）。若更新也硬拦，这些历史实例将无法再编辑，
@@ -205,7 +226,15 @@ func (s *instanceService) Update(ctx context.Context, tenantID int64, instance d
 		return err
 	}
 
-	return s.repo.Update(ctx, tenantID, instance)
+	if err := s.repo.Update(ctx, tenantID, instance); err != nil {
+		return err
+	}
+
+	// 更新审计：diff 旧属性 vs 新属性
+	if old.ID != 0 {
+		s.recordChanges(ctx, changeMetaFromInstance(instance, domain.ChangeSourceManual), old.Attributes, instance.Attributes)
+	}
+	return nil
 }
 
 func (s *instanceService) GetByID(ctx context.Context, tenantID int64, id int64) (domain.Instance, error) {
@@ -269,6 +298,8 @@ func (s *instanceService) Delete(ctx context.Context, tenantID int64, id int64) 
 
 	s.detachRelations(ctx, tenantID, id)
 	s.cleanupSyncQualityIssues(ctx, tenantID, existing.AssetID)
+	// 删除审计：所有字段视为「被删除」（NewValue 为空）
+	s.recordChanges(ctx, changeMetaFromInstance(existing, domain.ChangeSourceManual), existing.Attributes, nil)
 	return nil
 }
 
@@ -285,6 +316,74 @@ func (s *instanceService) cleanupSyncQualityIssues(ctx context.Context, tenantID
 		s.logger.Warn("级联清理同步问题记录失败",
 			elog.Int64("tenant_id", tenantID),
 			elog.String("asset_id", assetID),
+			elog.FieldErr(err))
+	}
+}
+
+// changeMetaFromInstance 从实例上下文提取变更元数据。
+func changeMetaFromInstance(inst domain.Instance, source string) domain.ChangeMetadata {
+	meta := domain.ChangeMetadata{
+		AssetID:      inst.AssetID,
+		AssetName:    inst.AssetName,
+		ModelUID:     inst.ModelUID,
+		TenantID:     inst.TenantID,
+		AccountID:    inst.AccountID,
+		ChangeSource: source,
+	}
+	if inst.Attributes != nil {
+		meta.Provider = toStr(inst.Attributes["provider"])
+		meta.Region = toStr(inst.Attributes["region"])
+	}
+	return meta
+}
+
+func toStr(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// recordChanges 把字段变更（变更前后值）写入 ecam_change_history。
+//
+// 需求（2026-11-02 产品确认）：审计需覆盖「变更前后值」。与 e-cam 共享
+// 同一集合，供现有 /api/v1/cam/audit/changes 面板消费。
+//
+// 非阻断：审计写入失败只记日志，绝不影响业务操作（审计挂了不能导致 CRUD 挂）。
+// oldAttrs / newAttrs 为 nil 分别表示「创建」（全新增）与「删除」（全移除）。
+func (s *instanceService) recordChanges(ctx context.Context, meta domain.ChangeMetadata, oldAttrs, newAttrs map[string]interface{}) {
+	if s.changeHistoryRepo == nil {
+		return
+	}
+	changes := domain.DiffAttributes(oldAttrs, newAttrs)
+	if len(changes) == 0 {
+		return
+	}
+	now := time.Now().UnixMilli()
+	records := make([]domain.ChangeRecord, len(changes))
+	for i, c := range changes {
+		records[i] = domain.ChangeRecord{
+			AssetID:      meta.AssetID,
+			AssetName:    meta.AssetName,
+			ModelUID:     meta.ModelUID,
+			TenantID:     meta.TenantID,
+			AccountID:    meta.AccountID,
+			Provider:     meta.Provider,
+			Region:       meta.Region,
+			FieldName:    c.FieldName,
+			OldValue:     c.OldValue,
+			NewValue:     c.NewValue,
+			ChangeSource: meta.ChangeSource,
+			Ctime:        now,
+		}
+	}
+	if err := s.changeHistoryRepo.BatchCreate(ctx, records); err != nil {
+		s.logger.Warn("审计变更记录写入失败",
+			elog.String("asset_id", meta.AssetID),
+			elog.Int("count", len(records)),
 			elog.FieldErr(err))
 	}
 }

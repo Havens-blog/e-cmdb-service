@@ -52,7 +52,7 @@ func TestInstanceDelete_CascadeRelations(t *testing.T) {
 		instRepo.instances[7] = domain.Instance{ID: 7, TenantID: 3, ModelUID: "ecs", AssetID: "i-7"}
 		relRepo := &fakeRelationRepoForCascade{}
 
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil, nil)
 		if err := svc.Delete(context.Background(), 3, 7); err != nil {
 			t.Fatalf("删除应成功，实际: %v", err)
 		}
@@ -70,7 +70,7 @@ func TestInstanceDelete_CascadeRelations(t *testing.T) {
 	t.Run("实例不存在时不解除任何关系", func(t *testing.T) {
 		instRepo := newFakeInstanceRepo()
 		relRepo := &fakeRelationRepoForCascade{}
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil, nil)
 
 		if err := svc.Delete(context.Background(), 3, 999); err == nil {
 			t.Fatal("不存在的实例应返回错误")
@@ -85,7 +85,7 @@ func TestInstanceDelete_CascadeRelations(t *testing.T) {
 		instRepo.instances[8] = domain.Instance{ID: 8, TenantID: 3, ModelUID: "ecs", AssetID: "i-8"}
 		relRepo := &fakeRelationRepoForCascade{deleteErr: context.DeadlineExceeded}
 
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil, nil)
 		if err := svc.Delete(context.Background(), 3, 8); err != nil {
 			t.Fatalf("关系清理失败不应导致删除失败，实际: %v", err)
 		}
@@ -97,7 +97,7 @@ func TestInstanceDelete_CascadeRelations(t *testing.T) {
 	t.Run("relationRepo 为 nil 时不 panic", func(t *testing.T) {
 		instRepo := newFakeInstanceRepo()
 		instRepo.instances[9] = domain.Instance{ID: 9, TenantID: 3, ModelUID: "ecs", AssetID: "i-9"}
-		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, nil, nil)
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, nil, nil, nil)
 
 		if err := svc.Delete(context.Background(), 3, 9); err != nil {
 			t.Fatalf("未注入 relationRepo 时应能正常删除，实际: %v", err)
