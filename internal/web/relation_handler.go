@@ -56,6 +56,8 @@ func (h *RelationHandler) RegisterRoutes(r *gin.RouterGroup) {
 	{
 		instRelGroup.POST("", ginx.WrapBody[CreateInstanceRelationReq](h.CreateInstanceRelation))
 		instRelGroup.POST("/batch", ginx.WrapBody[CreateBatchInstanceRelationReq](h.CreateBatchInstanceRelation))
+		// 从既有实例属性推导关系（dry_run 缺省 true，安全优先）
+		instRelGroup.POST("/derive", ginx.WrapBody[DeriveInstanceRelationsReq](h.DeriveInstanceRelations))
 		instRelGroup.GET("", h.ListInstanceRelations)
 		instRelGroup.DELETE("/:id", h.DeleteInstanceRelation)
 	}
@@ -280,6 +282,41 @@ func (h *RelationHandler) CreateInstanceRelation(ctx *gin.Context, req CreateIns
 	}
 
 	return Result(map[string]interface{}{"id": id}), nil
+}
+
+// DeriveInstanceRelationsReq 推导实例关系请求
+//
+// DryRun 缺省为 true（安全优先）：不显式传 false 时只统计不写入，
+// 便于先核对影响面再决定是否落库。
+type DeriveInstanceRelationsReq struct {
+	// Rule 推导规则，当前仅支持 ecs_disk；留空等价于 ecs_disk
+	Rule string `json:"rule"`
+	// DryRun true=只统计；false=实际写入
+	DryRun *bool `json:"dry_run"`
+}
+
+// DeriveInstanceRelations 从既有实例属性推导实例关系。
+//
+// 背景（实测 2026-11-02）：库中有 28 种关系类型定义，但实例关系为 0 条，
+// 导致拓扑图、影响分析、依赖分析全部是空壳。
+// ecs 侧没有磁盘引用字段，但 disk 侧 `instance_id` 有 1312 条精确命中
+// ecs 的 asset_id（708 台 ecs 全部可关联），故从子对象侧反向推导。
+func (h *RelationHandler) DeriveInstanceRelations(ctx *gin.Context, req DeriveInstanceRelationsReq) (ginx.Result, error) {
+	tenantID := middleware.GetTenantID(ctx)
+	if tenantID <= 0 {
+		return ErrorResultWithMsg(errs.ParamsError, "tenant not resolved from session"), nil
+	}
+
+	dryRun := true
+	if req.DryRun != nil {
+		dryRun = *req.DryRun
+	}
+
+	result, err := h.relationSvc.DeriveRelations(ctx.Request.Context(), tenantID, req.Rule, dryRun)
+	if err != nil {
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+	}
+	return Result(result), nil
 }
 
 func (h *RelationHandler) CreateBatchInstanceRelation(ctx *gin.Context, req CreateBatchInstanceRelationReq) (ginx.Result, error) {

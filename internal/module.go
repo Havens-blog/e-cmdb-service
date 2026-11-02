@@ -58,7 +58,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	// instanceSvc 注入 attributeRepo：Create 时按模型字段定义做必填硬拦校验
 	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
-	relationSvc := service.NewRelationService(relationRepo)
+	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
+	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)

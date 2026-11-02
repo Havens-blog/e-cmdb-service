@@ -623,6 +623,18 @@
         "type": "object",
         "x-layer": "web"
       },
+      "DeriveInstanceRelationsReq": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean"
+          },
+          "rule": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "x-layer": "web"
+      },
       "IDsReq": {
         "properties": {
           "ids": {
@@ -1660,6 +1672,56 @@
         ]
       }
     },
+    "/api/v1/cmdb/instance-relations/derive": {
+      "post": {
+        "operationId": "post_DeriveInstanceRelations",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeriveInstanceRelationsReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DeriveResult"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instance-relations"
+        ]
+      }
+    },
     "/api/v1/cmdb/instances": {
       "get": {
         "operationId": "get_List",
@@ -1823,7 +1885,7 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/InstanceVO"
+                      "$ref": "#/components/schemas/ModelGroupVO"
                     },
                     "msg": {
                       "type": "string"
@@ -2535,7 +2597,7 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/InstanceVO"
+                      "$ref": "#/components/schemas/ModelGroupVO"
                     },
                     "msg": {
                       "type": "string"
@@ -3123,7 +3185,7 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/InstanceVO"
+                      "$ref": "#/components/schemas/ModelGroupVO"
                     },
                     "msg": {
                       "type": "string"
