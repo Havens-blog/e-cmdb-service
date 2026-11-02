@@ -150,4 +150,25 @@ func TestUpsertBatch_RecordButNotBlock(t *testing.T) {
 			t.Fatalf("问题记录失败不应阻断采集，实际: %v", err)
 		}
 	})
+
+	t.Run("单条 Upsert 同样记录问题（与批量一致）", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		attrRepo := &fakeAttributeRepoForSync{
+			defs: []domain.Attribute{
+				{ModelUID: "ecs", FieldUID: "instance_id", FieldType: "string", Required: true},
+			},
+		}
+		sqRepo := &fakeSyncQualityIssueRepo{}
+
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, attrRepo, nil, sqRepo, nil)
+		err := svc.Upsert(context.Background(), domain.Instance{
+			ID: 103, TenantID: 3, ModelUID: "ecs", AssetID: "i-single-bad", Attributes: map[string]interface{}{},
+		})
+		if err != nil {
+			t.Fatalf("单条 upsert 不应报错: %v", err)
+		}
+		if len(sqRepo.upserted) == 0 {
+			t.Fatal("单条 upsert 也应记录字段问题，实际 0 条")
+		}
+	})
 }

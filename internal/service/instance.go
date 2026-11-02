@@ -439,6 +439,9 @@ func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) 
 	if err := instance.Validate(); err != nil {
 		return err
 	}
+	// 方案 B（记录但不阻断）：单条 upsert 与批量一致，先 warn-only 校验并记录问题清单。
+	// 之前单条 Upsert 漏接，导致走单条导入/同步的实例绕过了字段问题记录。
+	s.recordSyncQualityIssues(ctx, instance.TenantID, []domain.Instance{instance})
 	return s.repo.Upsert(ctx, instance)
 }
 
