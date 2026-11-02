@@ -190,6 +190,7 @@ func TestInstanceCreate_ModelNotFound(t *testing.T) {
 		&fakeModelRepo{getByUID: domain.Model{}},
 		nil,
 		nil,
+		nil,
 	)
 
 	_, err := svc.Create(context.Background(), domain.Instance{

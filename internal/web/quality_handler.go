@@ -32,6 +32,8 @@ func (h *QualityHandler) RegisterRoutes(r *gin.RouterGroup) {
 		g.GET("/overview", ginx.Wrap(h.Overview))
 		g.GET("/issues", ginx.Wrap(h.Issues))
 		g.GET("/orphan-sources", ginx.Wrap(h.OrphanSources))
+		// 同步链路「记录但不阻断」写入的问题清单
+		g.GET("/sync-issues", ginx.Wrap(h.SyncIssues))
 	}
 }
 
@@ -54,6 +56,22 @@ func (h *QualityHandler) Issues(ctx *gin.Context) (ginx.Result, error) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
 
 	data, err := h.svc.Issues(ctx.Request.Context(), tenantID, typ, offset, limit)
+	if err != nil {
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
+	}
+	return Result(data), nil
+}
+
+// SyncIssues 同步质量问题清单（记录但不阻断）。
+func (h *QualityHandler) SyncIssues(ctx *gin.Context) (ginx.Result, error) {
+	tenantID := middleware.GetTenantID(ctx)
+	modelUID := ctx.Query("model_uid")
+	issueType := ctx.Query("issue_type")
+	assetID := ctx.Query("asset_id")
+	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+
+	data, err := h.svc.SyncIssues(ctx.Request.Context(), tenantID, modelUID, issueType, assetID, offset, limit)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
 	}

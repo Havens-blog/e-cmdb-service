@@ -4395,6 +4395,46 @@
         ]
       }
     },
+    "/api/v1/cmdb/quality/sync-issues": {
+      "get": {
+        "operationId": "get_SyncIssues",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SyncIssueResult"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "quality"
+        ]
+      }
+    },
     "/api/v1/cmdb/topology/instance/:id": {
       "get": {
         "operationId": "get_get_topology_instance_id",
