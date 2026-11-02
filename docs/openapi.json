@@ -735,13 +735,31 @@
           "relation_type_uid": {
             "type": "string"
           },
+          "source_asset_id": {
+            "type": "string"
+          },
+          "source_asset_name": {
+            "type": "string"
+          },
           "source_instance_id": {
             "format": "int64",
             "type": "integer"
           },
+          "source_model_uid": {
+            "type": "string"
+          },
+          "target_asset_id": {
+            "type": "string"
+          },
+          "target_asset_name": {
+            "type": "string"
+          },
           "target_instance_id": {
             "format": "int64",
             "type": "integer"
+          },
+          "target_model_uid": {
+            "type": "string"
           },
           "tenant_id": {
             "format": "int64",
@@ -752,8 +770,14 @@
           "create_time",
           "id",
           "relation_type_uid",
+          "source_asset_id",
+          "source_asset_name",
           "source_instance_id",
+          "source_model_uid",
+          "target_asset_id",
+          "target_asset_name",
           "target_instance_id",
+          "target_model_uid",
           "tenant_id"
         ],
         "type": "object",

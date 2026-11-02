@@ -142,6 +142,13 @@ type InstanceRelationVO struct {
 	RelationTypeUID  string `json:"relation_type_uid"`
 	TenantID         int64  `json:"tenant_id"`
 	CreateTime       int64  `json:"create_time"`
+	// 两端实例摘要（列表页直接展示，避免前端二次查询）
+	SourceAssetID   string `json:"source_asset_id"`
+	SourceAssetName string `json:"source_asset_name"`
+	SourceModelUID  string `json:"source_model_uid"`
+	TargetAssetID   string `json:"target_asset_id"`
+	TargetAssetName string `json:"target_asset_name"`
+	TargetModelUID  string `json:"target_model_uid"`
 }
 
 // ==================== 模型关系类型处理方法 ====================
@@ -364,7 +371,7 @@ func (h *RelationHandler) ListInstanceRelations(ctx *gin.Context) {
 		Limit:            int64(limit),
 	}
 
-	rels, total, err := h.relationSvc.List(ctx.Request.Context(), filter)
+	rels, total, err := h.relationSvc.ListDetailed(ctx.Request.Context(), filter)
 	if err != nil {
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
@@ -379,6 +386,12 @@ func (h *RelationHandler) ListInstanceRelations(ctx *gin.Context) {
 			RelationTypeUID:  rel.RelationTypeUID,
 			TenantID:         rel.TenantID,
 			CreateTime:       rel.CreateTime.UnixMilli(),
+			SourceAssetID:    rel.Source.AssetID,
+			SourceAssetName:  rel.Source.AssetName,
+			SourceModelUID:   rel.Source.ModelUID,
+			TargetAssetID:    rel.Target.AssetID,
+			TargetAssetName:  rel.Target.AssetName,
+			TargetModelUID:   rel.Target.ModelUID,
 		}
 	}
 

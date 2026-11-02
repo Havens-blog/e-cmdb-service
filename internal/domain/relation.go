@@ -12,6 +12,21 @@ type InstanceRelation struct {
 	CreateTime       time.Time
 }
 
+// InstanceRef 关系端点的实例摘要（供列表页直接展示，避免前端二次查询）
+type InstanceRef struct {
+	ID        int64  `json:"id"`
+	AssetID   string `json:"asset_id"`
+	AssetName string `json:"asset_name"`
+	ModelUID  string `json:"model_uid"`
+}
+
+// InstanceRelationDetail 带两端实例摘要的实例关系（列表页展示用）
+type InstanceRelationDetail struct {
+	InstanceRelation
+	Source InstanceRef `json:"source"`
+	Target InstanceRef `json:"target"`
+}
+
 // InstanceRelationFilter 关系过滤条件
 type InstanceRelationFilter struct {
 	SourceInstanceID int64
