@@ -111,7 +111,7 @@ func (f *fakeInstanceRepo) AggregateUnboundStats(ctx context.Context, tenantID i
 func TestInstanceServiceGetByID_TenantMismatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	_, err := svc.GetByID(context.Background(), 200, 1)
 	if !errors.Is(err, errs.ErrInstanceNotFound) {
@@ -125,7 +125,7 @@ func TestInstanceServiceGetByID_TenantMismatch(t *testing.T) {
 func TestInstanceServiceGetByID_TenantMatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	got, err := svc.GetByID(context.Background(), 100, 1)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestInstanceServiceGetByID_TenantMatch(t *testing.T) {
 func TestInstanceServiceDelete_TenantMismatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100}
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	err := svc.Delete(context.Background(), 200, 1)
 	if !errors.Is(err, errs.ErrInstanceNotFound) {
@@ -153,7 +153,7 @@ func TestInstanceServiceDelete_TenantMismatch(t *testing.T) {
 func TestInstanceServiceDelete_TenantMatch(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100}
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	if err := svc.Delete(context.Background(), 100, 1); err != nil {
 		t.Fatalf("Delete error = %v", err)
@@ -165,7 +165,7 @@ func TestInstanceServiceDelete_TenantMatch(t *testing.T) {
 
 func TestInstanceServiceUpdate_ForwardsTenant(t *testing.T) {
 	repo := newFakeInstanceRepo()
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	inst := domain.Instance{ID: 7, ModelUID: "m", AssetID: "a", TenantID: 100}
 	if err := svc.Update(context.Background(), 100, inst); err != nil {
@@ -180,7 +180,7 @@ func TestInstanceServiceListByIDs_TenantFilter(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
 	repo.instances[2] = domain.Instance{ID: 2, TenantID: 200, ModelUID: "m", AssetID: "b"}
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	got, err := svc.ListByIDs(context.Background(), []int64{1, 2}, 100)
 	if err != nil {
@@ -198,7 +198,7 @@ func TestInstanceServiceListByIDs_NoTenantFilter(t *testing.T) {
 	repo := newFakeInstanceRepo()
 	repo.instances[1] = domain.Instance{ID: 1, TenantID: 100, ModelUID: "m", AssetID: "a"}
 	repo.instances[2] = domain.Instance{ID: 2, TenantID: 200, ModelUID: "m", AssetID: "b"}
-	svc := NewInstanceService(repo, &fakeModelRepo{})
+	svc := NewInstanceService(repo, &fakeModelRepo{}, nil)
 
 	got, err := svc.ListByIDs(context.Background(), []int64{1, 2}, 0)
 	if err != nil {

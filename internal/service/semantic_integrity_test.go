@@ -188,6 +188,7 @@ func TestInstanceCreate_ModelNotFound(t *testing.T) {
 	svc := NewInstanceService(
 		&semanticInstanceRepo{},
 		&fakeModelRepo{getByUID: domain.Model{}},
+		nil,
 	)
 
 	_, err := svc.Create(context.Background(), domain.Instance{

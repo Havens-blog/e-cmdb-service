@@ -55,7 +55,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	webhookRepo := repository.NewWebhookRepository(webhookDAO)
 
 	// Service
-	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo)
+	// instanceSvc 注入 attributeRepo：Create 时按模型字段定义做必填硬拦校验
+	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	relationSvc := service.NewRelationService(relationRepo)
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo)
