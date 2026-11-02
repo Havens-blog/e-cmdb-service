@@ -70,6 +70,14 @@ type QualityService interface {
 	Issues(ctx context.Context, tenantID int64, typ string, offset, limit int) (QualityIssuesResult, error)
 	// OrphanSources 按 model_uid 聚合孤儿实例来源（哪些模型缺失导致孤儿）
 	OrphanSources(ctx context.Context, tenantID int64) (OrphanSourceResult, error)
+	// SyncIssues 返回同步链路「记录但不阻断」写入的问题清单。
+	SyncIssues(ctx context.Context, tenantID int64, modelUID, issueType, assetID string, offset, limit int) (SyncIssueResult, error)
+}
+
+// SyncIssueResult 同步质量问题清单结果。
+type SyncIssueResult struct {
+	Items []domain.SyncQualityIssue `json:"items"`
+	Total int                       `json:"total"`
 }
 
 type qualityService struct {
@@ -77,7 +85,9 @@ type qualityService struct {
 	modelRepo    repository.ModelRepository
 	relationRepo repository.InstanceRelationRepository
 	attrRepo     repository.AttributeRepository
-	cache        *analysisCache
+	// syncQualityIssueRepo 读取同步链路记录的问题清单。
+	syncQualityIssueRepo repository.SyncQualityIssueRepository
+	cache                *analysisCache
 }
 
 // analysisCacheTTL 质量分析结果缓存时长。
@@ -151,13 +161,15 @@ func NewQualityService(
 	modelRepo repository.ModelRepository,
 	relationRepo repository.InstanceRelationRepository,
 	attrRepo repository.AttributeRepository,
+	syncQualityIssueRepo repository.SyncQualityIssueRepository,
 ) QualityService {
 	return &qualityService{
-		instanceRepo: instanceRepo,
-		modelRepo:    modelRepo,
-		relationRepo: relationRepo,
-		attrRepo:     attrRepo,
-		cache:        newAnalysisCache(),
+		instanceRepo:         instanceRepo,
+		modelRepo:            modelRepo,
+		relationRepo:         relationRepo,
+		attrRepo:             attrRepo,
+		syncQualityIssueRepo: syncQualityIssueRepo,
+		cache:                newAnalysisCache(),
 	}
 }
 
@@ -319,6 +331,29 @@ func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string,
 	}
 
 	return selectIssues(a.issues, typ, offset, limit), nil
+}
+
+// SyncIssues 返回同步链路「记录但不阻断」写入的问题清单。
+//
+// 与 Issues（全量扫描实时计算）不同，这里直接读同步时落库的
+// sync_quality_issue 集合，天然分页、无 60s 缓存延迟、逐条可追溯到
+// 是哪个 asset 的哪个字段、哪类问题。
+func (s *qualityService) SyncIssues(ctx context.Context, tenantID int64, modelUID, issueType, assetID string, offset, limit int) (SyncIssueResult, error) {
+	if s.syncQualityIssueRepo == nil {
+		return SyncIssueResult{Items: []domain.SyncQualityIssue{}, Total: 0}, nil
+	}
+	items, total, err := s.syncQualityIssueRepo.List(ctx, domain.SyncQualityIssueFilter{
+		TenantID:  tenantID,
+		ModelUID:  modelUID,
+		IssueType: issueType,
+		AssetID:   assetID,
+		Offset:    int64(offset),
+		Limit:     int64(limit),
+	})
+	if err != nil {
+		return SyncIssueResult{}, err
+	}
+	return SyncIssueResult{Items: items, Total: int(total)}, nil
 }
 
 // loadAnalysis 拉取数据后在内存中计算质量指标。模型/属性为全局数据，

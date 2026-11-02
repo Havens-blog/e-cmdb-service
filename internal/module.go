@@ -42,6 +42,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	attributeGroupDAO := dao.NewAttributeGroupDAO(db)
 	apiTokenDAO := dao.NewApiTokenDAO(db)
 	webhookDAO := dao.NewWebhookDAO(db)
+	syncQualityIssueDAO := dao.NewSyncQualityIssueDAO(db)
 
 	// Repository
 	instanceRepo := repository.NewInstanceRepository(instanceDAO)
@@ -53,11 +54,13 @@ func InitModule(db *mongox.Mongo) *Module {
 	attributeGroupRepo := repository.NewAttributeGroupRepository(attributeGroupDAO)
 	apiTokenRepo := repository.NewApiTokenRepository(apiTokenDAO)
 	webhookRepo := repository.NewWebhookRepository(webhookDAO)
+	syncQualityIssueRepo := repository.NewSyncQualityIssueRepository(syncQualityIssueDAO)
 
 	// Service
 	// instanceSvc：attrRepo 用于 Create 时按模型字段定义做必填硬拦校验；
-	// relationRepo 用于 Delete 时级联解除关系（避免产生悬空关系）
-	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo)
+	// relationRepo 用于 Delete 时级联解除关系（避免产生悬空关系）；
+	// syncQualityIssueRepo 用于同步链路「记录但不阻断」写入问题清单
+	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
@@ -65,7 +68,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)
 	attributeSvc := service.NewAttributeService(attributeRepo, attributeGroupRepo, modelRepo)
-	qualitySvc := service.NewQualityService(instanceRepo, modelRepo, relationRepo, attributeRepo)
+	qualitySvc := service.NewQualityService(instanceRepo, modelRepo, relationRepo, attributeRepo, syncQualityIssueRepo)
 	openAPISvc := service.NewOpenAPIService(apiTokenRepo, webhookRepo)
 	impactSvc := service.NewImpactService(instanceRepo, relationRepo)
 

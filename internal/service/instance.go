@@ -34,7 +34,10 @@ type instanceService struct {
 	// relationRepo 用于删除实例时**级联解除关系**（已确认规则第 5 条）。
 	// 允许为 nil：部分单元测试不涉及关系，此时跳过级联（仅记录警告）。
 	relationRepo repository.InstanceRelationRepository
-	logger       *elog.Component
+	// syncQualityIssueRepo 用于同步链路「记录但不阻断」：把字段校验问题写入
+	// 可查询的问题清单。允许为 nil（校验/记录退化为仅日志）。
+	syncQualityIssueRepo repository.SyncQualityIssueRepository
+	logger               *elog.Component
 }
 
 // NewInstanceService 创建实例服务
@@ -43,13 +46,15 @@ func NewInstanceService(
 	modelRepo repository.ModelRepository,
 	attrRepo repository.AttributeRepository,
 	relationRepo repository.InstanceRelationRepository,
+	syncQualityIssueRepo repository.SyncQualityIssueRepository,
 ) InstanceService {
 	return &instanceService{
-		repo:         repo,
-		modelRepo:    modelRepo,
-		attrRepo:     attrRepo,
-		relationRepo: relationRepo,
-		logger:       elog.DefaultLogger,
+		repo:                 repo,
+		modelRepo:            modelRepo,
+		attrRepo:             attrRepo,
+		relationRepo:         relationRepo,
+		syncQualityIssueRepo: syncQualityIssueRepo,
+		logger:               elog.DefaultLogger,
 	}
 }
 
@@ -82,6 +87,66 @@ func (s *instanceService) validateModelAttributes(ctx context.Context, instance 
 		return fmt.Errorf("%w: %s", errs.ErrInvalidAttributes, res.Error())
 	}
 	return nil
+}
+
+// recordSyncQualityIssues 把一批实例的字段校验问题（warn-only）写入问题清单。
+//
+// 方案 B（2026-11-02 产品确认）：「记录但不阻断」——同步采集不中断，
+// 但把每个不合规实例的必填/枚举/类型问题按自然键去重写入可查询清单。
+//
+// 效率：所有模型的字段定义只加载一次（groupByModelUID），
+// 避免对同步批次里的每条实例都发一次查询。
+// 校验与写入失败均只记日志、不返回错误，保证采集永不因质量记录而中断。
+func (s *instanceService) recordSyncQualityIssues(ctx context.Context, tenantID int64, instances []domain.Instance) {
+	if s.attrRepo == nil {
+		return
+	}
+
+	defs, err := s.attrRepo.List(ctx, domain.AttributeFilter{Limit: 100000})
+	if err != nil {
+		s.logger.Warn("同步质量记录：拉取字段定义失败，跳过", elog.FieldErr(err))
+		return
+	}
+	defsByModel := make(map[string][]domain.Attribute, 64)
+	for _, d := range defs {
+		defsByModel[d.ModelUID] = append(defsByModel[d.ModelUID], d)
+	}
+
+	for _, inst := range instances {
+		modelDefs, ok := defsByModel[inst.ModelUID]
+		if !ok || len(modelDefs) == 0 {
+			continue
+		}
+		res := domain.ValidateAttributes(inst.Attributes, modelDefs, false)
+		if len(res.Warnings) == 0 {
+			continue
+		}
+		for _, w := range res.Warnings {
+			issue := domain.SyncQualityIssue{
+				TenantID:  tenantID,
+				ModelUID:  inst.ModelUID,
+				AssetID:   inst.AssetID,
+				AssetName: inst.AssetName,
+				IssueType: w.Type,
+				FieldUID:  w.Field,
+				Message:   w.Message,
+			}
+			if s.syncQualityIssueRepo == nil {
+				s.logger.Warn("同步质量问题（未持久化，repo 为空）",
+					elog.Int64("tenant_id", tenantID),
+					elog.String("asset_id", inst.AssetID),
+					elog.String("field", w.Field),
+					elog.String("type", w.Type))
+				continue
+			}
+			if _, err := s.syncQualityIssueRepo.UpsertByKey(ctx, issue); err != nil {
+				s.logger.Warn("同步质量问题写入失败",
+					elog.String("asset_id", inst.AssetID),
+					elog.String("field", w.Field),
+					elog.FieldErr(err))
+			}
+		}
+	}
 }
 
 func (s *instanceService) Create(ctx context.Context, instance domain.Instance) (int64, error) {
@@ -203,7 +268,25 @@ func (s *instanceService) Delete(ctx context.Context, tenantID int64, id int64) 
 	}
 
 	s.detachRelations(ctx, tenantID, id)
+	s.cleanupSyncQualityIssues(ctx, tenantID, existing.AssetID)
 	return nil
+}
+
+// cleanupSyncQualityIssues 删除实例后，级联清理其同步质量问题记录。
+//
+// 背景（实测 2026-11-02）：同步问题清单按 (tenant, asset_id, ...) 去重，
+// 实例删除后若不清理，会留下指向已不存在实例的「悬空问题」，
+// 污染清单、误导排查。与 detachRelations 同构，均为删除实例时的级联清理。
+func (s *instanceService) cleanupSyncQualityIssues(ctx context.Context, tenantID int64, assetID string) {
+	if s.syncQualityIssueRepo == nil || assetID == "" {
+		return
+	}
+	if err := s.syncQualityIssueRepo.DeleteByAssetID(ctx, tenantID, assetID); err != nil {
+		s.logger.Warn("级联清理同步问题记录失败",
+			elog.Int64("tenant_id", tenantID),
+			elog.String("asset_id", assetID),
+			elog.FieldErr(err))
+	}
 }
 
 // detachRelations 级联解除某实例作为源或目标的全部关系。
@@ -261,6 +344,12 @@ func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) 
 }
 
 func (s *instanceService) UpsertBatch(ctx context.Context, instances []domain.Instance) error {
+	// 方案 B（记录但不阻断）：先做一轮 warn-only 字段校验并记录问题清单。
+	// 注意：必须在写库**之前**采集 tenantID，且不因记录失败而中断后续写入。
+	if len(instances) > 0 {
+		s.recordSyncQualityIssues(ctx, instances[0].TenantID, instances)
+	}
+
 	for _, inst := range instances {
 		if err := inst.Validate(); err != nil {
 			return err
