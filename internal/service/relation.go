@@ -16,6 +16,9 @@ type RelationService interface {
 	CreateBatch(ctx context.Context, relations []domain.InstanceRelation) (int64, error)
 	GetByID(ctx context.Context, tenantID int64, id int64) (domain.InstanceRelation, error)
 	List(ctx context.Context, filter domain.InstanceRelationFilter) ([]domain.InstanceRelation, int64, error)
+	// ListDetailed 返回带两端实例摘要（asset_id/asset_name/model_uid）的关系列表，
+	// 供列表页直接展示，避免前端按 ID 逐条二次查询。
+	ListDetailed(ctx context.Context, filter domain.InstanceRelationFilter) ([]domain.InstanceRelationDetail, int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByInstanceID(ctx context.Context, tenantID int64, instanceID int64) error
 	// DeriveRelations 按已确认的规则从既有实例属性推导实例关系。
@@ -81,6 +84,67 @@ func (s *relationService) List(ctx context.Context, filter domain.InstanceRelati
 	}
 
 	return relations, total, nil
+}
+
+// ListDetailed 返回带两端实例摘要的关系列表。
+//
+// 背景（2026-11-02）：实例关系列表此前只返回 source/target 的数字 ID，
+// 前端要展示「哪台 ecs 挂了哪些盘」必须按 ID 逐条二次查询实例。
+// 实测 1312 条关系涉及 2020 个去重实例 ID，逐条查询不可接受。
+// 这里用 instanceRepo.ListByIDs 一次性批量解析两端实例，拼出摘要。
+func (s *relationService) ListDetailed(ctx context.Context, filter domain.InstanceRelationFilter) ([]domain.InstanceRelationDetail, int64, error) {
+	relations, err := s.repo.List(ctx, filter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list relations: %w", err)
+	}
+
+	total, err := s.repo.Count(ctx, filter)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count relations: %w", err)
+	}
+
+	// 收集本页所有端点 ID 去重，一次批量解析
+	ids := make([]int64, 0, len(relations)*2)
+	seen := make(map[int64]bool, len(relations)*2)
+	for _, r := range relations {
+		for _, id := range []int64{r.SourceInstanceID, r.TargetInstanceID} {
+			if id > 0 && !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	refs := make(map[int64]domain.InstanceRef, len(ids))
+	if len(ids) > 0 {
+		instances, lerr := s.instanceRepo.ListByIDs(ctx, ids, filter.TenantID)
+		if lerr != nil {
+			// 解析失败不阻断列表展示：退化为「只有 ID、无摘要」，
+			// 前端仍可正常分页，只是资产名显示为 ID
+			s.logger.Warn("批量解析关系端点实例失败",
+				elog.Int("ids", len(ids)), elog.FieldErr(lerr))
+			instances = nil
+		}
+		for _, inst := range instances {
+			refs[inst.ID] = domain.InstanceRef{
+				ID:        inst.ID,
+				AssetID:   inst.AssetID,
+				AssetName: inst.AssetName,
+				ModelUID:  inst.ModelUID,
+			}
+		}
+	}
+
+	details := make([]domain.InstanceRelationDetail, len(relations))
+	for i, r := range relations {
+		details[i] = domain.InstanceRelationDetail{
+			InstanceRelation: r,
+			Source:           refs[r.SourceInstanceID],
+			Target:           refs[r.TargetInstanceID],
+		}
+	}
+
+	return details, total, nil
 }
 
 func (s *relationService) Delete(ctx context.Context, tenantID int64, id int64) error {
