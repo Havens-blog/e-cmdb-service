@@ -55,8 +55,9 @@ func InitModule(db *mongox.Mongo) *Module {
 	webhookRepo := repository.NewWebhookRepository(webhookDAO)
 
 	// Service
-	// instanceSvc 注入 attributeRepo：Create 时按模型字段定义做必填硬拦校验
-	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo)
+	// instanceSvc：attrRepo 用于 Create 时按模型字段定义做必填硬拦校验；
+	// relationRepo 用于 Delete 时级联解除关系（避免产生悬空关系）
+	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo)

@@ -31,16 +31,25 @@ type instanceService struct {
 	// attrRepo 用于按模型字段定义校验实例属性（必填/枚举/类型）。
 	// 允许为 nil：单元测试与部分历史调用只关心租户隔离，不涉及字段校验。
 	attrRepo repository.AttributeRepository
-	logger   *elog.Component
+	// relationRepo 用于删除实例时**级联解除关系**（已确认规则第 5 条）。
+	// 允许为 nil：部分单元测试不涉及关系，此时跳过级联（仅记录警告）。
+	relationRepo repository.InstanceRelationRepository
+	logger       *elog.Component
 }
 
 // NewInstanceService 创建实例服务
-func NewInstanceService(repo repository.InstanceRepository, modelRepo repository.ModelRepository, attrRepo repository.AttributeRepository) InstanceService {
+func NewInstanceService(
+	repo repository.InstanceRepository,
+	modelRepo repository.ModelRepository,
+	attrRepo repository.AttributeRepository,
+	relationRepo repository.InstanceRelationRepository,
+) InstanceService {
 	return &instanceService{
-		repo:      repo,
-		modelRepo: modelRepo,
-		attrRepo:  attrRepo,
-		logger:    elog.DefaultLogger,
+		repo:         repo,
+		modelRepo:    modelRepo,
+		attrRepo:     attrRepo,
+		relationRepo: relationRepo,
+		logger:       elog.DefaultLogger,
 	}
 }
 
@@ -170,6 +179,16 @@ func (s *instanceService) List(ctx context.Context, filter domain.InstanceFilter
 	return instances, total, nil
 }
 
+// Delete 删除实例，并**级联解除**其参与的所有关系。
+//
+// 缺陷修复（实测 2026-11-02）：此前只删实例、完全不动关系。
+// 实测复现：建 A→B 关系后删除 B，关系仍残留（target 指向已不存在的实例），
+// 即产生**悬空关系**。这违反了已确认的关系语义规则第 5 条
+// 「删除资产时级联解除关系」。
+//
+// 顺序：先删实例、再清关系。
+// 理由：关系清理失败不应阻止删除本身（否则脏数据永远删不掉）；
+// 清理失败只记警告，且该关系会因目标实例已不存在而在后续体检中暴露。
 func (s *instanceService) Delete(ctx context.Context, tenantID int64, id int64) error {
 	existing, err := s.repo.GetByID(ctx, tenantID, id)
 	if err != nil {
@@ -179,11 +198,59 @@ func (s *instanceService) Delete(ctx context.Context, tenantID int64, id int64) 
 		return errs.ErrInstanceNotFound
 	}
 
-	return s.repo.Delete(ctx, tenantID, id)
+	if err := s.repo.Delete(ctx, tenantID, id); err != nil {
+		return err
+	}
+
+	s.detachRelations(ctx, tenantID, id)
+	return nil
 }
 
+// detachRelations 级联解除某实例作为源或目标的全部关系。
+func (s *instanceService) detachRelations(ctx context.Context, tenantID int64, instanceID int64) {
+	if s.relationRepo == nil {
+		s.logger.Warn("relationRepo 未注入，跳过关系级联解除",
+			elog.Int64("tenant_id", tenantID), elog.Int64("instance_id", instanceID))
+		return
+	}
+	if err := s.relationRepo.DeleteByInstanceID(ctx, tenantID, instanceID); err != nil {
+		// 不阻断删除主流程，仅记录：否则脏数据将永远无法删除
+		s.logger.Warn("级联解除实例关系失败",
+			elog.Int64("tenant_id", tenantID),
+			elog.Int64("instance_id", instanceID),
+			elog.FieldErr(err))
+		return
+	}
+	s.logger.Info("已级联解除实例关系",
+		elog.Int64("tenant_id", tenantID), elog.Int64("instance_id", instanceID))
+}
+
+// DeleteByAccountID 按云账号批量删除实例。
+//
+// 该路径删除的是**一批**实例，若不清理关系会一次性产生大量悬空关系，
+// 危害比单条删除更大。因此先取出待删实例 ID，删除后再逐个解除关系。
 func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64) error {
-	return s.repo.DeleteByAccountID(ctx, accountID)
+	// 先收集受影响实例（用于清理关系）；取不到不影响删除本身
+	var ids []int64
+	if s.relationRepo != nil {
+		if list, err := s.repo.List(ctx, domain.InstanceFilter{AccountID: accountID, Limit: 100000}); err != nil {
+			s.logger.Warn("按账号删除前查询实例列表失败，将跳过关系清理",
+				elog.Int64("account_id", accountID), elog.FieldErr(err))
+		} else {
+			for _, inst := range list {
+				ids = append(ids, inst.ID)
+			}
+		}
+	}
+
+	if err := s.repo.DeleteByAccountID(ctx, accountID); err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		s.detachRelations(ctx, 0, id)
+	}
+	return nil
 }
 
 func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) error {
