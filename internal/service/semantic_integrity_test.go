@@ -191,6 +191,7 @@ func TestInstanceCreate_ModelNotFound(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	_, err := svc.Create(context.Background(), domain.Instance{

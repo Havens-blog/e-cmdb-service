@@ -43,6 +43,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	apiTokenDAO := dao.NewApiTokenDAO(db)
 	webhookDAO := dao.NewWebhookDAO(db)
 	syncQualityIssueDAO := dao.NewSyncQualityIssueDAO(db)
+	changeHistoryDAO := dao.NewChangeHistoryDAO(db)
 
 	// Repository
 	instanceRepo := repository.NewInstanceRepository(instanceDAO)
@@ -55,12 +56,14 @@ func InitModule(db *mongox.Mongo) *Module {
 	apiTokenRepo := repository.NewApiTokenRepository(apiTokenDAO)
 	webhookRepo := repository.NewWebhookRepository(webhookDAO)
 	syncQualityIssueRepo := repository.NewSyncQualityIssueRepository(syncQualityIssueDAO)
+	changeHistoryRepo := repository.NewChangeHistoryRepository(changeHistoryDAO)
 
 	// Service
 	// instanceSvc：attrRepo 用于 Create 时按模型字段定义做必填硬拦校验；
 	// relationRepo 用于 Delete 时级联解除关系（避免产生悬空关系）；
-	// syncQualityIssueRepo 用于同步链路「记录但不阻断」写入问题清单
-	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo)
+	// syncQualityIssueRepo 用于同步链路「记录但不阻断」写入问题清单；
+	// changeHistoryRepo 用于实例变更审计（变更前后值写入 ecam_change_history）
+	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo, changeHistoryRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
