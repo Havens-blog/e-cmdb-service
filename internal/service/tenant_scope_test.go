@@ -21,6 +21,9 @@ type fakeInstanceRepo struct {
 	updated       domain.Instance
 	deletedTenant int64
 	deletedID     int64
+	// listByModel 可选：按 model_uid 返回固定列表（用于 DeriveRelations 等测试）。
+	// 为 nil 时 List 走原逻辑（返回 nil），不影响既有测试。
+	listByModel map[string][]domain.Instance
 }
 
 func newFakeInstanceRepo() *fakeInstanceRepo {
@@ -51,6 +54,12 @@ func (f *fakeInstanceRepo) GetByAssetID(ctx context.Context, tenantID int64, mod
 	return domain.Instance{}, nil
 }
 func (f *fakeInstanceRepo) List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, error) {
+	if f.listByModel != nil {
+		if v, ok := f.listByModel[filter.ModelUID]; ok {
+			return v, nil
+		}
+		return nil, nil
+	}
 	return nil, nil
 }
 func (f *fakeInstanceRepo) ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error) {
@@ -320,6 +329,7 @@ func TestRelationServiceDeleteByInstanceID_ForwardsTenant(t *testing.T) {
 func (f *fakeInstanceRepo) CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error) {
 	return 0, nil
 }
+
 // GroupOrphanInstancesByModel 桩实现：数据质量孤儿来源聚合（测试中不使用）。
 func (f *fakeInstanceRepo) GroupOrphanInstancesByModel(ctx context.Context, tenantID int64, knownModelUIDs []string) ([]repository.OrphanModelGroup, error) {
 	return nil, nil
