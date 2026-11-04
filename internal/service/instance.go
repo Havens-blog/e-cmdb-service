@@ -22,6 +22,8 @@ type InstanceService interface {
 	ListByIDs(ctx context.Context, ids []int64, tenantID int64) ([]domain.Instance, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
+	// BatchDelete 批量删除实例（逐条结果，不回滚；每条复用单条 Delete 的级联+审计）。
+	BatchDelete(ctx context.Context, tenantID int64, ids []int64) (domain.BatchDeleteResult, error)
 	Upsert(ctx context.Context, instance domain.Instance) error
 	UpsertBatch(ctx context.Context, instances []domain.Instance) error
 }
@@ -301,6 +303,31 @@ func (s *instanceService) Delete(ctx context.Context, tenantID int64, id int64) 
 	// 删除审计：所有字段视为「被删除」（NewValue 为空）
 	s.recordChanges(ctx, changeMetaFromInstance(existing, domain.ChangeSourceManual), existing.Attributes, nil)
 	return nil
+}
+
+// BatchDelete 批量删除实例。
+//
+// 语义（2026-11-02 关系语义第 6 条「逐条结果，不回滚」扩展到实例）：
+//   - 逐条调用单条 Delete（复用级联解除关系 + 审计 + 清理同步问题记录）
+//   - 单条失败不中断后续，成功与失败分别收集返回
+//   - 不做全量回滚：部分失败时已删除的不会恢复
+//
+// 安全边界：调用方（web 层）必须传入**已按租户校验**的 ids；
+// 本方法对每条仍走带 tenantID 的 Delete，天然防跨租户误删。
+func (s *instanceService) BatchDelete(ctx context.Context, tenantID int64, ids []int64) (domain.BatchDeleteResult, error) {
+	result := domain.BatchDeleteResult{
+		Deleted: make([]int64, 0, len(ids)),
+		Failed:  make([]domain.BatchDeleteItem, 0),
+		Total:   len(ids),
+	}
+	for _, id := range ids {
+		if err := s.Delete(ctx, tenantID, id); err != nil {
+			result.Failed = append(result.Failed, domain.BatchDeleteItem{ID: id, Error: err.Error()})
+			continue
+		}
+		result.Deleted = append(result.Deleted, id)
+	}
+	return result, nil
 }
 
 // cleanupSyncQualityIssues 删除实例后，级联清理其同步质量问题记录。

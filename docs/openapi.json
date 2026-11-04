@@ -261,6 +261,19 @@
         "type": "object",
         "x-layer": "web"
       },
+      "BatchDeleteInstanceReq": {
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "x-layer": "web"
+      },
       "CreateAttributeGroupReq": {
         "properties": {
           "description": {
@@ -2022,6 +2035,56 @@
                         "count": {}
                       },
                       "type": "object"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instances"
+        ]
+      }
+    },
+    "/api/v1/cmdb/instances/batch-delete": {
+      "post": {
+        "operationId": "post_BatchDelete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDeleteInstanceReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/BatchDeleteResult"
                     },
                     "msg": {
                       "type": "string"

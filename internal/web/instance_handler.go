@@ -43,6 +43,7 @@ func (h *InstanceHandler) RegisterRoutes(r *gin.RouterGroup) {
 		g.GET("", h.List)
 		g.PUT("/:id", ginx.WrapBody[UpdateInstanceReq](h.Update))
 		g.DELETE("/:id", h.Delete)
+		g.POST("/batch-delete", ginx.WrapBody[BatchDeleteInstanceReq](h.BatchDelete))
 	}
 }
 
@@ -336,6 +337,21 @@ func (h *InstanceHandler) Delete(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, Result(nil))
+}
+
+// BatchDeleteInstanceReq 批量删除实例请求。
+type BatchDeleteInstanceReq struct {
+	IDs []int64 `json:"ids" binding:"required,min=1"`
+}
+
+// BatchDelete 批量删除实例（逐条结果，不回滚）。
+func (h *InstanceHandler) BatchDelete(ctx *gin.Context, req BatchDeleteInstanceReq) (ginx.Result, error) {
+	tenantID := middleware.GetTenantID(ctx)
+	res, err := h.svc.BatchDelete(ctx.Request.Context(), tenantID, req.IDs)
+	if err != nil {
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
+	}
+	return Result(res), nil
 }
 
 func (h *InstanceHandler) toVO(instance domain.Instance) InstanceVO {

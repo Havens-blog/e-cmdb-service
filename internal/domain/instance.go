@@ -106,3 +106,19 @@ func (i *Instance) GetIntAttribute(key string) int64 {
 		return 0
 	}
 }
+
+// BatchDeleteItem 批量删除中单条失败的实例。
+type BatchDeleteItem struct {
+	ID    int64  `json:"id"`
+	Error string `json:"error"`
+}
+
+// BatchDeleteResult 批量删除结果（逐条结果，不回滚）。
+//
+// 语义（2026-11-02 关系语义第 6 条已确认，现扩展到实例批量删除）：
+// 不做全量回滚——单条失败不影响其他条，成功与失败分别返回。
+type BatchDeleteResult struct {
+	Deleted []int64           `json:"deleted"`
+	Failed  []BatchDeleteItem `json:"failed"`
+	Total   int               `json:"total"` // 请求删除的总条数
+}
