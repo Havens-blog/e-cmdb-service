@@ -432,6 +432,12 @@
           },
           "model_uid": {
             "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
           }
         },
         "required": [
@@ -823,6 +829,12 @@
           "model_uid": {
             "type": "string"
           },
+          "owner": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
           "tenant_id": {
             "format": "int64",
             "type": "integer"
@@ -840,6 +852,8 @@
           "create_time",
           "id",
           "model_uid",
+          "owner",
+          "source",
           "tenant_id",
           "update_time"
         ],
@@ -1225,6 +1239,12 @@
           "attributes": {
             "additionalProperties": true,
             "type": "object"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
           }
         },
         "type": "object",
@@ -1345,6 +1365,12 @@
             "type": "object"
           },
           "model_uid": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "source": {
             "type": "string"
           }
         },
