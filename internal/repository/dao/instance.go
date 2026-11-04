@@ -23,6 +23,8 @@ type Instance struct {
 	TenantID   int64                  `bson:"tenant_id"`
 	AccountID  int64                  `bson:"account_id"`
 	Attributes map[string]interface{} `bson:"attributes"`
+	Source     string                 `bson:"source,omitempty"`
+	Owner      string                 `bson:"owner,omitempty"`
 	Ctime      int64                  `bson:"ctime"`
 	Utime      int64                  `bson:"utime"`
 }
@@ -214,6 +216,8 @@ func (d *instanceDAO) Update(ctx context.Context, tenantID int64, instance Insta
 		"asset_id":   instance.AssetID,
 		"account_id": instance.AccountID,
 		"attributes": instance.Attributes,
+		"source":     instance.Source,
+		"owner":      instance.Owner,
 		"utime":      now,
 	}}
 
@@ -384,6 +388,8 @@ func (d *instanceDAO) Upsert(ctx context.Context, instance Instance) error {
 			"asset_name": instance.AssetName,
 			"account_id": instance.AccountID,
 			"attributes": instance.Attributes,
+			"source":     instance.Source,
+			"owner":      instance.Owner,
 			"utime":      now,
 		},
 		"$setOnInsert": bson.M{

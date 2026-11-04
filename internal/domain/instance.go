@@ -15,6 +15,10 @@ type Instance struct {
 	TenantID   int64                  // 租户ID
 	AccountID  int64                  // 云账号ID
 	Attributes map[string]interface{} // 动态属性
+	// Source 数据来源：sync（云同步）/ manual（手工）/ import（导入）。空 = 未知。
+	Source string
+	// Owner 责任人：手工维护的责任人标识（工号/用户名）。空 = 未分配。
+	Owner      string
 	CreateTime time.Time
 	UpdateTime time.Time
 }

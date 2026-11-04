@@ -54,6 +54,8 @@ type CreateInstanceReq struct {
 	AssetName  string                 `json:"asset_name"`
 	AccountID  int64                  `json:"account_id"`
 	Attributes map[string]interface{} `json:"attributes"`
+	Source     string                 `json:"source"` // 数据来源：sync/manual/import，空=未知
+	Owner      string                 `json:"owner"`  // 责任人，空=未分配
 }
 
 // CreateBatchInstanceReq 批量创建实例请求
@@ -68,6 +70,8 @@ type UpsertInstanceReq struct {
 	AssetName  string                 `json:"asset_name"`
 	AccountID  int64                  `json:"account_id"`
 	Attributes map[string]interface{} `json:"attributes"`
+	Source     string                 `json:"source"`
+	Owner      string                 `json:"owner"`
 }
 
 // UpsertBatchInstanceReq 批量更新或插入实例请求
@@ -79,6 +83,8 @@ type UpsertBatchInstanceReq struct {
 type UpdateInstanceReq struct {
 	AssetName  string                 `json:"asset_name"`
 	Attributes map[string]interface{} `json:"attributes"`
+	Source     string                 `json:"source"`
+	Owner      string                 `json:"owner"`
 }
 
 // InstanceVO 实例视图对象
@@ -90,6 +96,8 @@ type InstanceVO struct {
 	TenantID   int64                  `json:"tenant_id"`
 	AccountID  int64                  `json:"account_id"`
 	Attributes map[string]interface{} `json:"attributes"`
+	Source     string                 `json:"source"`
+	Owner      string                 `json:"owner"`
 	CreateTime int64                  `json:"create_time"`
 	UpdateTime int64                  `json:"update_time"`
 }
@@ -109,6 +117,8 @@ func (h *InstanceHandler) Create(ctx *gin.Context, req CreateInstanceReq) (ginx.
 		TenantID:   middleware.GetTenantID(ctx),
 		AccountID:  req.AccountID,
 		Attributes: req.Attributes,
+		Source:     req.Source,
+		Owner:      req.Owner,
 	}
 
 	id, err := h.svc.Create(ctx.Request.Context(), instance)
@@ -137,6 +147,8 @@ func (h *InstanceHandler) CreateBatch(ctx *gin.Context, req CreateBatchInstanceR
 			TenantID:   tenantID,
 			AccountID:  r.AccountID,
 			Attributes: r.Attributes,
+			Source:     r.Source,
+			Owner:      r.Owner,
 		}
 	}
 
@@ -157,6 +169,8 @@ func (h *InstanceHandler) Upsert(ctx *gin.Context, req UpsertInstanceReq) (ginx.
 		TenantID:   middleware.GetTenantID(ctx),
 		AccountID:  req.AccountID,
 		Attributes: req.Attributes,
+		Source:     req.Source,
+		Owner:      req.Owner,
 	}
 
 	err := h.svc.Upsert(ctx.Request.Context(), instance)
@@ -179,6 +193,8 @@ func (h *InstanceHandler) UpsertBatch(ctx *gin.Context, req UpsertBatchInstanceR
 			TenantID:   tenantID,
 			AccountID:  r.AccountID,
 			Attributes: r.Attributes,
+			Source:     r.Source,
+			Owner:      r.Owner,
 		}
 	}
 
@@ -300,6 +316,12 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 	if req.AssetName != "" {
 		existing.AssetName = req.AssetName
 	}
+	if req.Source != "" {
+		existing.Source = req.Source
+	}
+	if req.Owner != "" {
+		existing.Owner = req.Owner
+	}
 	if req.Attributes != nil {
 		if existing.Attributes == nil {
 			existing.Attributes = make(map[string]interface{})
@@ -363,6 +385,8 @@ func (h *InstanceHandler) toVO(instance domain.Instance) InstanceVO {
 		TenantID:   instance.TenantID,
 		AccountID:  instance.AccountID,
 		Attributes: instance.Attributes,
+		Source:     instance.Source,
+		Owner:      instance.Owner,
 		CreateTime: instance.CreateTime.UnixMilli(),
 		UpdateTime: instance.UpdateTime.UnixMilli(),
 	}

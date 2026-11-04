@@ -188,6 +188,8 @@ func (r *instanceRepository) toDAO(instance domain.Instance) dao.Instance {
 		TenantID:   instance.TenantID,
 		AccountID:  instance.AccountID,
 		Attributes: instance.Attributes,
+		Source:     instance.Source,
+		Owner:      instance.Owner,
 	}
 }
 
@@ -200,6 +202,8 @@ func (r *instanceRepository) toDomain(daoInstance dao.Instance) domain.Instance 
 		TenantID:   daoInstance.TenantID,
 		AccountID:  daoInstance.AccountID,
 		Attributes: daoInstance.Attributes,
+		Source:     daoInstance.Source,
+		Owner:      daoInstance.Owner,
 		CreateTime: time.UnixMilli(daoInstance.Ctime),
 		UpdateTime: time.UnixMilli(daoInstance.Utime),
 	}
