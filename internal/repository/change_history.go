@@ -39,6 +39,7 @@ func (r *changeHistoryRepository) BatchCreate(ctx context.Context, records []dom
 			NewValue:     rec.NewValue,
 			ChangeSource: rec.ChangeSource,
 			ChangeTaskID: rec.ChangeTaskID,
+			Operator:     rec.Operator,
 			Ctime:        rec.Ctime,
 		}
 	}

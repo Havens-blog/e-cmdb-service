@@ -24,6 +24,7 @@ type ChangeRecord struct {
 	NewValue     string `bson:"new_value"`
 	ChangeSource string `bson:"change_source"`
 	ChangeTaskID string `bson:"change_task_id"`
+	Operator     string `bson:"operator,omitempty"`
 	Ctime        int64  `bson:"ctime"`
 }
 

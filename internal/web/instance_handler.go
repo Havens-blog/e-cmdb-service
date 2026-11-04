@@ -121,7 +121,7 @@ func (h *InstanceHandler) Create(ctx *gin.Context, req CreateInstanceReq) (ginx.
 		Owner:      req.Owner,
 	}
 
-	id, err := h.svc.Create(ctx.Request.Context(), instance)
+	id, err := h.svc.Create(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instance)
 	if err != nil {
 		if err == errs.ErrModelNotFound {
 			return ErrorResult(errs.ModelNotFound), nil
@@ -331,7 +331,7 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 		}
 	}
 
-	err = h.svc.Update(ctx.Request.Context(), tenantID, existing)
+	err = h.svc.Update(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), tenantID, existing)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -348,7 +348,7 @@ func (h *InstanceHandler) Delete(ctx *gin.Context) {
 		return
 	}
 
-	err = h.svc.Delete(ctx.Request.Context(), middleware.GetTenantID(ctx), id)
+	err = h.svc.Delete(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), middleware.GetTenantID(ctx), id)
 	if err != nil {
 		if err == errs.ErrInstanceNotFound {
 			ctx.JSON(404, ErrorResult(errs.InstanceNotFound))
@@ -369,7 +369,7 @@ type BatchDeleteInstanceReq struct {
 // BatchDelete 批量删除实例（逐条结果，不回滚）。
 func (h *InstanceHandler) BatchDelete(ctx *gin.Context, req BatchDeleteInstanceReq) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
-	res, err := h.svc.BatchDelete(ctx.Request.Context(), tenantID, req.IDs)
+	res, err := h.svc.BatchDelete(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), tenantID, req.IDs)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
 	}

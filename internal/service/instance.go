@@ -7,6 +7,7 @@ import (
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
+	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
 	"github.com/gotomicro/ego/core/elog"
 )
@@ -390,6 +391,7 @@ func (s *instanceService) recordChanges(ctx context.Context, meta domain.ChangeM
 		return
 	}
 	now := time.Now().UnixMilli()
+	operator := middleware.OperatorFrom(ctx)
 	records := make([]domain.ChangeRecord, len(changes))
 	for i, c := range changes {
 		records[i] = domain.ChangeRecord{
@@ -404,6 +406,7 @@ func (s *instanceService) recordChanges(ctx context.Context, meta domain.ChangeM
 			OldValue:     c.OldValue,
 			NewValue:     c.NewValue,
 			ChangeSource: meta.ChangeSource,
+			Operator:     operator,
 			Ctime:        now,
 		}
 	}
