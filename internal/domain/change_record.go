@@ -27,7 +27,10 @@ type ChangeRecord struct {
 	NewValue     string `json:"new_value" bson:"new_value"` // JSON 序列化
 	ChangeSource string `json:"change_source" bson:"change_source"`
 	ChangeTaskID string `json:"change_task_id" bson:"change_task_id"`
-	Ctime        int64  `json:"ctime" bson:"ctime"`
+	// Operator 操作者（用户名）。手工变更时来自登录会话 claims 的 username；
+	// 同步/导入等非交互操作可能为空。空 = 无操作者。
+	Operator string `json:"operator" bson:"operator,omitempty"`
+	Ctime    int64  `json:"ctime" bson:"ctime"`
 }
 
 // ChangeMetadata 变更元数据（从实例上下文提取）。

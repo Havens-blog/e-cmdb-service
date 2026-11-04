@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
+	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
 )
 
@@ -138,6 +139,47 @@ func TestInstanceAudit(t *testing.T) {
 		// Delete 失败不阻断
 		if err := svc.Delete(context.Background(), 3, 11); err != nil {
 			t.Fatalf("审计失败不应阻断删除: %v", err)
+		}
+	})
+
+	t.Run("operator 从 context 传递到审计记录", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		chRepo := &fakeChangeHistoryRepo{}
+
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		// 用 WithOperator 注入操作者（模拟 handler 层注入登录用户名）
+		ctx := middleware.WithOperator(context.Background(), "testuser")
+		_, err := svc.Create(ctx, domain.Instance{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-op", Attributes: map[string]interface{}{"a": 1}})
+		if err != nil {
+			t.Fatalf("创建应成功: %v", err)
+		}
+
+		if len(chRepo.records) == 0 {
+			t.Fatal("应写入审计记录")
+		}
+		for _, r := range chRepo.records {
+			if r.Operator != "testuser" {
+				t.Fatalf("operator 应为 testuser: %+v", r)
+			}
+		}
+	})
+
+	t.Run("无 operator 的 context 记录空 operator", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		chRepo := &fakeChangeHistoryRepo{}
+
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		// 不注入 operator（同步/服务间调用）
+		_, err := svc.Create(context.Background(), domain.Instance{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-noop", Attributes: map[string]interface{}{"a": 1}})
+		if err != nil {
+			t.Fatalf("创建应成功: %v", err)
+		}
+		for _, r := range chRepo.records {
+			if r.Operator != "" {
+				t.Fatalf("无 operator 时应为空: %+v", r)
+			}
 		}
 	})
 }
