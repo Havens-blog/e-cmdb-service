@@ -1948,7 +1948,7 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/ModelGroupVO"
+                      "$ref": "#/components/schemas/InstanceVO"
                     },
                     "msg": {
                       "type": "string"
@@ -2710,7 +2710,7 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/ModelGroupVO"
+                      "$ref": "#/components/schemas/InstanceVO"
                     },
                     "msg": {
                       "type": "string"
@@ -3298,7 +3298,7 @@
                       "type": "integer"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/ModelGroupVO"
+                      "$ref": "#/components/schemas/InstanceVO"
                     },
                     "msg": {
                       "type": "string"

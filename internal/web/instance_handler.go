@@ -276,6 +276,8 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 		AssetName:  assetName,
 		AssetID:    assetID,
 		Attributes: attributes,
+		Source:     ctx.Query("source"),
+		Owner:      ctx.Query("owner"),
 		SortBy:     ctx.Query("sort_by"),
 		SortDesc:   ctx.Query("order") == "desc",
 		Offset:     int64(offset),

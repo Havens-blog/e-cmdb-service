@@ -38,6 +38,10 @@ type InstanceFilter struct {
 	// （其内部已同时对 asset_name 与 asset_id 做正则匹配）。
 	AssetID    string
 	Attributes map[string]interface{} // 按属性过滤
+	// Source / Owner 按「来源」「责任人」精确匹配（2026-11-04 加字段功能的筛选闭环）。
+	// 33k 量级无索引全表扫可接受；量级显著增长后再议索引。
+	Source string
+	Owner  string
 	// SortBy 排序字段（白名单见 dao 层）。空表示使用默认排序（ctime 倒序）。
 	//
 	// 背景（实测 2026-11-01）：实例列表此前**完全不支持排序** ——
