@@ -38,6 +38,9 @@ type InstanceFilter struct {
 	// AssetID 按资产 ID 精确匹配（与 AssetName 的模糊搜索相互独立，可叠加为 AND）
 	AssetID    string
 	Attributes map[string]interface{}
+	// Source / Owner 按「来源」「责任人」精确匹配（2026-11-04 加字段的筛选闭环）
+	Source string
+	Owner  string
 	// SortBy 排序字段（须在 sortableFields 白名单内，否则回退默认排序）
 	SortBy   string
 	SortDesc bool
@@ -420,6 +423,13 @@ func (d *instanceDAO) buildQuery(filter InstanceFilter) bson.M {
 	// 用于「按资产 ID 精确定位单条记录」的场景，避免调用方误以为筛选生效。
 	if filter.AssetID != "" {
 		query["asset_id"] = filter.AssetID
+	}
+	// source / owner 精确匹配（「来源」「责任人」字段的筛选闭环）
+	if filter.Source != "" {
+		query["source"] = filter.Source
+	}
+	if filter.Owner != "" {
+		query["owner"] = filter.Owner
 	}
 	if filter.AssetName != "" {
 		// 关键字同时匹配资产名称与资产 ID。
