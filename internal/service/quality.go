@@ -270,6 +270,10 @@ func (s *qualityService) overviewByCount(ctx context.Context, tenantID int64) (Q
 		if !modelSet[a.ModelUID] {
 			continue
 		}
+		// 方案②：自身标识/名称字段由顶层 asset_id/asset_name 承载，不视为缺失
+		if identityFieldSatisfiedByTopLevel(a.ModelUID, a.FieldUID) {
+			continue
+		}
 		c, cerr := s.instanceRepo.CountMissingAttribute(ctx, tenantID, a.ModelUID, a.FieldUID)
 		if cerr != nil {
 			return QualityOverview{}, false, cerr
@@ -483,6 +487,10 @@ func analyzeQuality(models []domain.Model, attributes []domain.Attribute, instan
 
 		if modelExists {
 			for _, attr := range requiredByModel[inst.ModelUID] {
+				// 方案②：自身标识/名称字段由顶层 asset_id/asset_name 承载
+				if identityFieldSatisfiedByTopLevel(inst.ModelUID, attr.FieldUID) {
+					continue
+				}
 				val, ok := inst.Attributes[attr.FieldUID]
 				if !ok || val == nil {
 					missing++
@@ -522,6 +530,28 @@ func analyzeQuality(models []domain.Model, attributes []domain.Attribute, instan
 		healthScore:           computeHealthScore(len(instances), orphan+missing+dangling),
 		issues:                issues,
 	}
+}
+
+// identityFieldSatisfiedByTopLevel 判断某模型必填字段是否由实例顶层 asset_id /
+// asset_name 承载（产品方案②，2026-11-16 确认）。
+//
+// 背景（实测）：多云同步把资产自身标识与名称写在实例顶层 asset_id / asset_name，
+// 而模型定义中另有 <model>_id / <model>_name / instance_id / instance_name /
+// cloud_id 等 required 属性（如 ecs.instance_id、subnet.subnet_id、
+// security_group.security_group_name）。命中这些字段的"缺失"属判定口径问题，
+// 不是真实缺数（占当时 4,461 条中的 4,392 条）。
+//
+// 边界：只豁免「自身标识/名称」字段。父级引用（如 subnet.vpc_id 指向所属 VPC、
+// security_group.vpc_id）不匹配 <model>_id 规则，仍按真实缺失统计。
+func identityFieldSatisfiedByTopLevel(modelUID, fieldUID string) bool {
+	if modelUID == "" || fieldUID == "" {
+		return false
+	}
+	switch fieldUID {
+	case "instance_id", "instance_name", "cloud_id":
+		return true
+	}
+	return fieldUID == modelUID+"_id" || fieldUID == modelUID+"_name"
 }
 
 // computeHealthScore 计算健康分：100 * (1 - issueCount / max(1, totalInstances))，
