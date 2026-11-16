@@ -275,3 +275,61 @@ func TestNeedsFullAnalysisForIssues(t *testing.T) {
 		}
 	})
 }
+
+// TestIdentityFieldSatisfiedByTopLevel 方案②（2026-11-16 产品确认）：
+// 资产自身标识/名称由顶层 asset_id/asset_name 承载的必填字段不视为缺失；
+// 父级引用字段（如 subnet.vpc_id）必须仍按缺失统计。
+func TestIdentityFieldSatisfiedByTopLevel(t *testing.T) {
+	cases := []struct {
+		model, field string
+		want         bool
+	}{
+		{"ecs", "instance_id", true},
+		{"ecs", "instance_name", true},
+		{"subnet", "subnet_id", true},
+		{"subnet", "subnet_name", true},
+		{"security_group", "security_group_id", true},
+		{"security_group", "security_group_name", true},
+		{"cloud_vm", "cloud_id", true},
+		{"vpc", "vpc_id", true},
+		// 父级引用：不豁免
+		{"subnet", "vpc_id", false},
+		{"security_group", "vpc_id", false},
+		// 无关字段：不豁免
+		{"host", "hostname", false},
+		{"host", "ip_address", false},
+		{"ecs", "region", false},
+		{"ecs", "cloud_account_id", false},
+		// 空值防御
+		{"", "instance_id", false},
+		{"ecs", "", false},
+	}
+	for _, c := range cases {
+		if got := identityFieldSatisfiedByTopLevel(c.model, c.field); got != c.want {
+			t.Errorf("identityFieldSatisfiedByTopLevel(%q,%q) = %v, want %v", c.model, c.field, got, c.want)
+		}
+	}
+}
+
+// TestAnalyzeQuality_IdentityFieldNotMissing analyzeQuality 全量分析路径同口径：
+// ecs.instance_id 有顶层 asset_id 即不产生缺失明细，而 subnet.vpc_id 缺仍然报。
+func TestAnalyzeQuality_IdentityFieldNotMissing(t *testing.T) {
+	models := []domain.Model{{UID: "ecs"}, {UID: "subnet"}}
+	attributes := []domain.Attribute{
+		{ModelUID: "ecs", FieldUID: "instance_id", FieldName: "实例ID", Required: true},
+		{ModelUID: "subnet", FieldUID: "vpc_id", FieldName: "所属VPC", Required: true},
+	}
+	instances := []domain.Instance{
+		{ID: 1, ModelUID: "ecs", AssetID: "i-1", AssetName: "ecs-1", Attributes: map[string]interface{}{}},
+		{ID: 2, ModelUID: "subnet", AssetID: "vsw-1", AssetName: "subnet-1", Attributes: map[string]interface{}{}},
+	}
+
+	a := analyzeQuality(models, attributes, instances, nil)
+
+	if a.missingFieldCount != 1 {
+		t.Fatalf("missingFieldCount = %d, want 1（仅 subnet.vpc_id）", a.missingFieldCount)
+	}
+	if len(a.issues) != 1 || a.issues[0].FieldUID != "vpc_id" {
+		t.Fatalf("issues = %#v, want single vpc_id", a.issues)
+	}
+}

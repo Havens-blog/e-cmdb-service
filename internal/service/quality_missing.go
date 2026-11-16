@@ -55,6 +55,10 @@ func (s *qualityService) issuesMissingByPushdown(
 		if !a.Required || a.ModelUID == "" || a.FieldUID == "" || !modelSet[a.ModelUID] {
 			continue
 		}
+		// 方案②：自身标识/名称字段由顶层 asset_id/asset_name 承载，不视为缺失
+		if identityFieldSatisfiedByTopLevel(a.ModelUID, a.FieldUID) {
+			continue
+		}
 		k := key{a.ModelUID, a.FieldUID, a.FieldName}
 		if seen[k] {
 			continue
