@@ -19,6 +19,18 @@ var providerBridge = map[string]string{
 	"volcengine": "volcano",
 }
 
+// resourceTypeSynonyms 资源类型同义词：同一资源在 e-cam 同步侧与模型表中的不同叫法。
+//
+// 背景（实测 2026-11-16）：e-cam 的 sync_vswitch 按厂商 API 术语拼
+// `{provider}_vswitch`，而模型表该通用模型名为 subnet（provider=all），
+// 规则 1 只生成 `{provider}_subnet` → `{provider}_vswitch` 永久无法归一，
+// 持续产生孤儿实例（模拟环境实测 huawei_vswitch/volcengine_vswitch 反复新增）。
+//
+// 键为模型 UID，值为同步侧可能写入的同义类型名（用于生成别名）。
+var resourceTypeSynonyms = map[string][]string{
+	"subnet": {"vswitch"},
+}
+
 // BuildModelAliases 依据模型全集生成「别名 → 模型 UID」归一映射，
 // 供 e-cam-service 的 modelalias.RemoteResolver 拉取（实例写入前把
 // {provider}_{类型} 形式的 model_uid 归一到本服务的真实模型 UID，
@@ -45,15 +57,20 @@ func BuildModelAliases(models []Model) map[string]string {
 
 	aliases := make(map[string]string)
 
-	// 规则 1：通用回退
+	// 规则 1：通用回退（含资源类型同义词，如 vswitch→subnet）
 	for _, m := range models {
 		if m.Provider != "all" {
 			continue
 		}
-		for _, p := range KnownCloudProviders {
-			alias := p + "_" + m.UID
-			if _, ok := set[alias]; !ok {
-				aliases[alias] = m.UID
+		names := make([]string, 0, 1+len(resourceTypeSynonyms[m.UID]))
+		names = append(names, m.UID)
+		names = append(names, resourceTypeSynonyms[m.UID]...)
+		for _, name := range names {
+			for _, p := range KnownCloudProviders {
+				alias := p + "_" + name
+				if _, ok := set[alias]; !ok {
+					aliases[alias] = m.UID
+				}
 			}
 		}
 	}
