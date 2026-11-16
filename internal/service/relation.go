@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gotomicro/ego/core/elog"
+
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // RelationService 实例关系服务接口
@@ -42,7 +43,44 @@ func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo
 	}
 }
 
+// validateInstancesExist 校验关系两端实例存在（同租户）。
+//
+// 缺陷背景（实测 2026-11-17）：Create 只做查重、不校验端点实例，历史上产生了
+// 8 条两端皆亡的悬空关系（数据质量页 dangling_relation）。删除实例虽已级联解除
+// 关系，但通过 API/批量推送仍可制造新的悬空引用，故在写入前拦截。
+func (s *relationService) validateInstancesExist(ctx context.Context, tenantID int64, ids []int64) error {
+	if s.instanceRepo == nil {
+		return nil
+	}
+	uniq := make([]int64, 0, len(ids))
+	seen := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		uniq = append(uniq, id)
+	}
+	instances, err := s.instanceRepo.ListByIDs(ctx, uniq, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to check instances existence: %w", err)
+	}
+	found := make(map[int64]bool, len(instances))
+	for _, inst := range instances {
+		found[inst.ID] = true
+	}
+	for _, id := range uniq {
+		if !found[id] {
+			return fmt.Errorf("%w: instance_id=%d", errs.ErrInstanceNotFound, id)
+		}
+	}
+	return nil
+}
+
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {
+	if err := s.validateInstancesExist(ctx, relation.TenantID, []int64{relation.SourceInstanceID, relation.TargetInstanceID}); err != nil {
+		return 0, err
+	}
 	exists, err := s.repo.Exists(ctx, relation.TenantID, relation.SourceInstanceID, relation.TargetInstanceID, relation.RelationTypeUID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to check relation existence: %w", err)
@@ -57,6 +95,16 @@ func (s *relationService) Create(ctx context.Context, relation domain.InstanceRe
 func (s *relationService) CreateBatch(ctx context.Context, relations []domain.InstanceRelation) (int64, error) {
 	if len(relations) == 0 {
 		return 0, nil
+	}
+	// 每条关系按各自租户校验端点；全部通过才写入，避免部分写入产生悬空引用
+	idsByTenant := make(map[int64][]int64, 4)
+	for _, r := range relations {
+		idsByTenant[r.TenantID] = append(idsByTenant[r.TenantID], r.SourceInstanceID, r.TargetInstanceID)
+	}
+	for tenantID, ids := range idsByTenant {
+		if err := s.validateInstancesExist(ctx, tenantID, ids); err != nil {
+			return 0, err
+		}
 	}
 	return s.repo.CreateBatch(ctx, relations)
 }
