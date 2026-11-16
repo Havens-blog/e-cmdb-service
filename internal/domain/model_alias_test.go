@@ -122,6 +122,24 @@ func TestBuildModelAliases(t *testing.T) {
 	}
 }
 
+// TestBuildModelAliases_ResourceTypeSynonyms 资源类型同义词参与别名生成。
+//
+// 回归背景（实测 2026-11-16）：e-cam sync_vswitch 写 {provider}_vswitch，
+// 本服务模型名为 subnet → 规则 1 只生成 {provider}_subnet，vswitch 类型
+// 永久孤儿。必须为每个已知厂商生成 {provider}_vswitch → subnet。
+func TestBuildModelAliases_ResourceTypeSynonyms(t *testing.T) {
+	models := []Model{model("subnet", "all")}
+	got := BuildModelAliases(models)
+	for _, p := range KnownCloudProviders {
+		if alias := p + "_vswitch"; got[alias] != "subnet" {
+			t.Errorf("%s = %q, 期望 subnet（同义词未参与别名生成）", alias, got[alias])
+		}
+		if alias := p + "_subnet"; got[alias] != "subnet" {
+			t.Errorf("%s = %q, 期望 subnet（原有通用回退被破坏）", alias, got[alias])
+		}
+	}
+}
+
 // TestBuildModelAliases_NoAliasForRealModels 真实模型 uid 一律不作为别名键出现。
 func TestBuildModelAliases_NoAliasForRealModels(t *testing.T) {
 	models := []Model{
