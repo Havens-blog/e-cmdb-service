@@ -14,6 +14,10 @@ import (
 
 const InstanceCollection = "ecam_instance"
 
+// BindingCollection 服务树资源绑定集合（e-cam servicetree 写入；
+// 遗留集合 c_resource_binding 已弃用，勿再用于联表）
+const BindingCollection = "ecam_resource_binding"
+
 // Instance DAO层资产实例模型
 type Instance struct {
 	ID         int64                  `bson:"id"`
@@ -475,20 +479,27 @@ func aggregateStatsByIDsMatch(ids []int64, tenantID int64) bson.M {
 }
 
 // unboundPipeline 构建查询未绑定资产的聚合管道
-// 思路: c_instance LEFT JOIN c_resource_binding，保留 binding 为空的记录
+// 思路: c_instance LEFT JOIN 资源绑定表，保留 binding 为空的记录。
+//
+// 缺陷修复（实测 2026-11-17）：
+//  1. 绑定实际写入 `ecam_resource_binding`（1,161 条 rule 绑定 + 9 条 manual），
+//     原实现却查遗留集合 `c_resource_binding`（74 条、tenant_id 为字符串）→
+//     已绑定资产全部被当作「未绑定」（实测 unbound count = 实例总数 21,046）
+//  2. 绑定表里 resource_type 同时存在 `instance`（规则绑定）与 `asset`（手工绑定），
+//     原实现只匹配 `instance`，即使集合改对也会漏排手工绑定
 func (d *instanceDAO) unboundPipeline(tenantID int64) mongo.Pipeline {
 	return mongo.Pipeline{
 		// 1. 按租户过滤
 		{{Key: "$match", Value: bson.M{"tenant_id": tenantID}}},
 		// 2. LEFT JOIN binding 表: 用 instance.id 关联 binding.resource_id
 		{{Key: "$lookup", Value: bson.M{
-			"from": "c_resource_binding",
+			"from": BindingCollection,
 			"let":  bson.M{"inst_id": "$id", "tenant": "$tenant_id"},
 			"pipeline": mongo.Pipeline{
 				{{Key: "$match", Value: bson.M{"$expr": bson.M{"$and": bson.A{
 					bson.M{"$eq": bson.A{"$resource_id", "$$inst_id"}},
 					bson.M{"$eq": bson.A{"$tenant_id", "$$tenant"}},
-					bson.M{"$eq": bson.A{"$resource_type", "instance"}},
+					bson.M{"$in": bson.A{"$resource_type", bson.A{"instance", "asset"}}},
 				}}}}},
 				// 只需要知道有没有，取1条就够
 				{{Key: "$limit", Value: 1}},
