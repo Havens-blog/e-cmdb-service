@@ -1233,6 +1233,11 @@
       },
       "UpdateInstanceReq": {
         "properties": {
+          "account_id": {
+            "description": "云账号ID：缺省=不改，0=解除关联，非0=改挂",
+            "format": "int64",
+            "type": "integer"
+          },
           "asset_name": {
             "type": "string"
           },

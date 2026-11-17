@@ -3,13 +3,14 @@ package web
 import (
 	"strconv"
 
+	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
+	"github.com/gotomicro/ego/core/elog"
+
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
-	"github.com/Havens-blog/e-common-go/ginx"
-	"github.com/gin-gonic/gin"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // InstanceHandler 资产实例HTTP处理器
@@ -80,8 +81,17 @@ type UpsertBatchInstanceReq struct {
 }
 
 // UpdateInstanceReq 更新实例请求
+//
+// AccountID 用指针区分「未传」与「显式置 0」：
+//   - 字段缺失（nil）：不改动账号归属，保持部分更新语义；
+//   - 显式传 0：解除云账号关联（与 Create 的默认值 0 含义一致）；
+//   - 传非 0：改挂到指定云账号。
+//
+// 前端编辑弹窗里「云账号ID」是可编辑项，此前该字段不在请求体里，
+// 导致用户改了账号、提示「更新成功」、实际值不变（静默丢弃）。
 type UpdateInstanceReq struct {
 	AssetName  string                 `json:"asset_name"`
+	AccountID  *int64                 `json:"account_id"`
 	Attributes map[string]interface{} `json:"attributes"`
 	Source     string                 `json:"source"`
 	Owner      string                 `json:"owner"`
@@ -315,8 +325,28 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
+	applyInstanceUpdate(&existing, req)
+
+	err = h.svc.Update(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), tenantID, existing)
+	if err != nil {
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+	}
+
+	return Result(nil), nil
+}
+
+// applyInstanceUpdate 把更新请求合并进既有实例。
+//
+// 语义（与历史行为保持一致，仅补充 account_id）：
+//   - 字符串字段只在非空时覆盖：空串表示「本次不改」，历史接口没有清空能力；
+//   - attributes 是逐键合并，不是整体替换，因此未提交的键保持原值；
+//   - account_id 用指针：nil=不改，0=解除关联，非 0=改挂。
+func applyInstanceUpdate(existing *domain.Instance, req UpdateInstanceReq) {
 	if req.AssetName != "" {
 		existing.AssetName = req.AssetName
+	}
+	if req.AccountID != nil {
+		existing.AccountID = *req.AccountID
 	}
 	if req.Source != "" {
 		existing.Source = req.Source
@@ -332,13 +362,6 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 			existing.Attributes[k] = v
 		}
 	}
-
-	err = h.svc.Update(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), tenantID, existing)
-	if err != nil {
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
-	}
-
-	return Result(nil), nil
 }
 
 // Delete 删除实例
