@@ -184,8 +184,11 @@ func (h *RelationHandler) ListModelRelations(ctx *gin.Context) {
 	sourceModelUID := ctx.Query("source_model_uid")
 	targetModelUID := ctx.Query("target_model_uid")
 	relationType := ctx.Query("relation_type")
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePagingWithin(ctx.Query("offset"), ctx.Query("limit"), defaultListLimit, maxModelRelationListLimit)
+	if pagingErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, pagingErr))
+		return
+	}
 
 	filter := domain.ModelRelationTypeFilter{
 		SourceModelUID: sourceModelUID,
@@ -375,8 +378,11 @@ func (h *RelationHandler) ListInstanceRelations(ctx *gin.Context) {
 	targetIDStr := ctx.Query("target_instance_id")
 	relationTypeUID := ctx.Query("relation_type_uid")
 	tenantID := middleware.GetTenantID(ctx)
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, pagingErr))
+		return
+	}
 
 	var sourceID, targetID int64
 	if sourceIDStr != "" {

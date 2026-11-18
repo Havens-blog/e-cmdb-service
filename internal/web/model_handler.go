@@ -3,11 +3,12 @@ package web
 import (
 	"strconv"
 
+	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
-	"github.com/Havens-blog/e-common-go/ginx"
-	"github.com/gin-gonic/gin"
 )
 
 // ModelHandler 模型HTTP处理器
@@ -137,8 +138,11 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 	// （实测 extensible=true / false 均返回 80，而实际全部为 true）。
 	extensibleStr := ctx.Query("extensible")
 
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, pagingErr))
+		return
+	}
 
 	var level int
 	if levelStr != "" {

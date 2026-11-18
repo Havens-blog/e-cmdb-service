@@ -3,13 +3,14 @@ package web
 import (
 	"strconv"
 
+	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
+	"github.com/gotomicro/ego/core/elog"
+
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
-	"github.com/Havens-blog/e-common-go/ginx"
-	"github.com/gin-gonic/gin"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // OpenAPIHandler 开放 API 管理 HTTP 处理器。
@@ -126,8 +127,10 @@ func (h *OpenAPIHandler) CreateToken(ctx *gin.Context, req CreateTokenReq) (ginx
 // ListTokens 分页查询 API Token。
 func (h *OpenAPIHandler) ListTokens(ctx *gin.Context) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
+	}
 
 	tokens, total, err := h.svc.ListTokens(ctx.Request.Context(), tenantID, offset, limit)
 	if err != nil {
@@ -180,8 +183,10 @@ func (h *OpenAPIHandler) CreateWebhook(ctx *gin.Context, req CreateWebhookReq) (
 // ListWebhooks 分页查询 Webhook 订阅。
 func (h *OpenAPIHandler) ListWebhooks(ctx *gin.Context) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
+	}
 
 	webhooks, total, err := h.svc.ListWebhooks(ctx.Request.Context(), tenantID, offset, limit)
 	if err != nil {

@@ -1,14 +1,13 @@
 package web
 
 import (
-	"strconv"
+	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
+	"github.com/gotomicro/ego/core/elog"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
-	"github.com/Havens-blog/e-common-go/ginx"
-	"github.com/gin-gonic/gin"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // QualityHandler 数据质量 HTTP 处理器。
@@ -52,8 +51,10 @@ func (h *QualityHandler) Overview(ctx *gin.Context) (ginx.Result, error) {
 func (h *QualityHandler) Issues(ctx *gin.Context) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
 	typ := ctx.Query("type")
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
+	}
 
 	data, err := h.svc.Issues(ctx.Request.Context(), tenantID, typ, offset, limit)
 	if err != nil {
@@ -68,8 +69,10 @@ func (h *QualityHandler) SyncIssues(ctx *gin.Context) (ginx.Result, error) {
 	modelUID := ctx.Query("model_uid")
 	issueType := ctx.Query("issue_type")
 	assetID := ctx.Query("asset_id")
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
+	}
 
 	data, err := h.svc.SyncIssues(ctx.Request.Context(), tenantID, modelUID, issueType, assetID, offset, limit)
 	if err != nil {
