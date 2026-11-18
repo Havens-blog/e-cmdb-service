@@ -130,6 +130,8 @@ type InstanceDAO interface {
 	Count(ctx context.Context, filter InstanceFilter) (int64, error)
 	// CountByModelUID 按 model_uid 分组统计租户下实例数量（服务端聚合）
 	CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error)
+	// Facets 聚合租户下实例的筛选可选值（provider / region / source）
+	Facets(ctx context.Context, tenantID int64) (*InstanceFacets, error)
 	// CountOrphanInstances 统计孤儿实例数量（model_uid 不在模型表）
 	CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error)
 	// ListOrphanInstances 分页拉取孤儿实例
@@ -339,6 +341,88 @@ func (d *instanceDAO) CountByModelUID(ctx context.Context, tenantID int64) (map[
 	out := make(map[string]int64, len(rows))
 	for _, r := range rows {
 		out[r.ModelUID] = r.N
+	}
+	return out, nil
+}
+
+// FacetBucket 一个筛选维度的取值与实例数。
+type FacetBucket struct {
+	Value string `bson:"_id"`
+	Count int64  `bson:"count"`
+}
+
+// InstanceFacets 实例列表的筛选可选值。
+//
+// 背景（2026-11-18 实测）：前端原先把云平台写成硬编码 5 项、把区域从**当前页 20 条**
+// 里提取，导致「火山引擎」筛出 0 条（库里 provider=volcano 有 7,813 条）、
+// 区域下拉只覆盖当前页。改为服务端聚合后，筛选可选值与真实数据一致。
+type InstanceFacets struct {
+	Providers []FacetBucket
+	Regions   []FacetBucket
+	Sources   []FacetBucket
+	Total     int64
+}
+
+// facetMaxValues 每个维度最多返回的取值个数。
+//
+// 区域实测约 60 个、provider 6 个、source 3 个，100 足够覆盖；
+// 上限是为了防止将来属性爆炸时把响应撑大。
+const facetMaxValues = 100
+
+// buildFacetPipeline 构造筛选可选值聚合管道。
+//
+// 用 $ifNull 把缺失值归一为空串，避免 $group 的 _id 出现 null 导致
+// 反序列化到 string 失败；空串由前端显示为「未标注」。
+func buildFacetPipeline(tenantID int64, maxValues int) mongo.Pipeline {
+	bucket := func(field string) bson.A {
+		return bson.A{
+			bson.D{{Key: "$group", Value: bson.D{
+				{Key: "_id", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$" + field, ""}}}},
+				{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+			}}},
+			bson.D{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}, {Key: "_id", Value: 1}}}},
+			bson.D{{Key: "$limit", Value: maxValues}},
+		}
+	}
+	return mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"tenant_id": tenantID}}},
+		{{Key: "$facet", Value: bson.D{
+			{Key: "providers", Value: bucket("attributes.provider")},
+			{Key: "regions", Value: bucket("attributes.region")},
+			{Key: "sources", Value: bucket("source")},
+			{Key: "total", Value: bson.A{bson.D{{Key: "$count", Value: "count"}}}},
+		}}},
+	}
+}
+
+// Facets 聚合租户下实例的筛选可选值（provider / region / source 及总数）。
+func (d *instanceDAO) Facets(ctx context.Context, tenantID int64) (*InstanceFacets, error) {
+	cursor, err := d.db.Collection(InstanceCollection).Aggregate(ctx, buildFacetPipeline(tenantID, facetMaxValues))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		Providers []FacetBucket `bson:"providers"`
+		Regions   []FacetBucket `bson:"regions"`
+		Sources   []FacetBucket `bson:"sources"`
+		Total     []struct {
+			Count int64 `bson:"count"`
+		} `bson:"total"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+
+	out := &InstanceFacets{}
+	if len(rows) > 0 {
+		out.Providers = rows[0].Providers
+		out.Regions = rows[0].Regions
+		out.Sources = rows[0].Sources
+		if len(rows[0].Total) > 0 {
+			out.Total = rows[0].Total[0].Count
+		}
 	}
 	return out, nil
 }

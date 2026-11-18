@@ -51,6 +51,25 @@ func (h *InstanceHandler) RegisterRoutes(r *gin.RouterGroup) {
 		g.DELETE("/:id", h.Delete)
 		g.POST("/batch-delete", ginx.WrapBody[BatchDeleteInstanceReq](h.BatchDelete))
 	}
+
+	// /instance-facets 与 /instances 同级：gin 不允许 /instances/:id 的同级静态段，
+	// 因此筛选可选值单独成路径，避免启动期路由冲突 panic。
+	f := r.Group("/instance-facets")
+	f.Use(middleware.RequireTenant(elog.DefaultLogger))
+	f.GET("", h.Facets)
+}
+
+// Facets 返回实例列表的筛选可选值（云平台 / 区域 / 来源及总数）。
+//
+// 前端据此生成筛选下拉，取代「硬编码云平台 + 从当前页 20 条提取区域」的旧做法；
+// 聚合失败时前端回退到静态取值，不影响列表本身。
+func (h *InstanceHandler) Facets(ctx *gin.Context) {
+	facets, err := h.svc.Facets(ctx.Request.Context(), middleware.GetTenantID(ctx))
+	if err != nil {
+		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
+	}
+	ctx.JSON(200, Result(facets))
 }
 
 // CreateInstanceReq 创建实例请求
