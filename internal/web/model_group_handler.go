@@ -1,13 +1,12 @@
 package web
 
 import (
-	"strconv"
+	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
-	"github.com/Havens-blog/e-common-go/ginx"
-	"github.com/gin-gonic/gin"
 )
 
 // ModelGroupHandler 模型分组HTTP处理器
@@ -93,8 +92,11 @@ func (h *ModelGroupHandler) Create(ctx *gin.Context, req CreateModelGroupReq) (g
 
 // List 获取模型分组列表
 func (h *ModelGroupHandler) List(ctx *gin.Context) {
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "100"))
+	offset, limit, pagingErr := resolvePagingWithin(ctx.Query("offset"), ctx.Query("limit"), attributeListLimit, maxListLimit)
+	if pagingErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, pagingErr))
+		return
+	}
 
 	filter := domain.ModelGroupFilter{
 		Offset: offset,
