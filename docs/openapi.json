@@ -1233,23 +1233,27 @@
       },
       "UpdateInstanceReq": {
         "properties": {
+          "asset_name": {
+            "type": "string",
+            "description": "资产名称：缺省=不改；显式空串=清空（会被拒绝：资产名称不能清空）"
+          },
           "account_id": {
             "description": "云账号ID：缺省=不改，0=解除关联，非0=改挂",
             "format": "int64",
             "type": "integer"
           },
-          "asset_name": {
-            "type": "string"
-          },
           "attributes": {
+            "type": "object",
             "additionalProperties": true,
-            "type": "object"
-          },
-          "owner": {
-            "type": "string"
+            "description": "按 key 合并：缺省的 key 保持原值；值为 null 表示清空该属性（必填字段的清空会被拒绝）"
           },
           "source": {
-            "type": "string"
+            "type": "string",
+            "description": "数据来源：缺省=不改；显式空串=清空"
+          },
+          "owner": {
+            "type": "string",
+            "description": "责任人：缺省=不改；显式空串=清空"
           }
         },
         "type": "object",

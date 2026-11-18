@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gotomicro/ego/core/elog"
+
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // InstanceService 资产实例服务接口
@@ -27,6 +28,9 @@ type InstanceService interface {
 	BatchDelete(ctx context.Context, tenantID int64, ids []int64) (domain.BatchDeleteResult, error)
 	Upsert(ctx context.Context, instance domain.Instance) error
 	UpsertBatch(ctx context.Context, instances []domain.Instance) error
+	// RequiredAttributeNames 返回模型必填字段的 field_uid → 展示名，
+	// 供「编辑时清空字段」判断哪些字段不允许被清空（2026-11-18 产品确认）。
+	RequiredAttributeNames(ctx context.Context, modelUID string) (map[string]string, error)
 }
 
 type instanceService struct {
@@ -96,6 +100,34 @@ func (s *instanceService) validateModelAttributes(ctx context.Context, instance 
 		return fmt.Errorf("%w: %s", errs.ErrInvalidAttributes, res.Error())
 	}
 	return nil
+}
+
+// RequiredAttributeNames 返回模型必填字段的 field_uid → 展示名。
+//
+// 用途：编辑实例时把某个属性显式置空（清空）属于**破坏性**语义，
+// 必填字段必须被拒绝。这里只读取定义，不做写入。
+// attrRepo 为 nil 或拉取失败时返回空集合 + error，由调用方决定降级策略
+// （handler 侧对 error 采取「放行并记日志」，避免附属查询故障阻断编辑）。
+func (s *instanceService) RequiredAttributeNames(ctx context.Context, modelUID string) (map[string]string, error) {
+	if s.attrRepo == nil || modelUID == "" {
+		return nil, nil
+	}
+	defs, err := s.attrRepo.List(ctx, domain.AttributeFilter{ModelUID: modelUID, Limit: 500})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(defs))
+	for _, d := range defs {
+		if !d.Required || d.FieldUID == "" {
+			continue
+		}
+		name := d.DisplayName
+		if name == "" {
+			name = d.FieldName
+		}
+		out[d.FieldUID] = name
+	}
+	return out, nil
 }
 
 // recordSyncQualityIssues 把一批实例的字段校验问题（warn-only）写入问题清单。

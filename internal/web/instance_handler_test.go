@@ -39,10 +39,11 @@ func TestApplyInstanceUpdate_AccountID(t *testing.T) {
 	}
 }
 
-// TestApplyInstanceUpdate_KeepHistoricalSemantics 锁定历史字段语义不被顺手改掉：
-// 字符串字段空值代表「本次不改」，attributes 为逐键合并而非整体替换。
-// 若将来要支持「清空字段」，那是产品决策，需要连带改这里和前端提示。
-func TestApplyInstanceUpdate_KeepHistoricalSemantics(t *testing.T) {
+// TestApplyInstanceUpdate_UnsetKeepsValues 锁定「未传的字段一律不改」。
+//
+// 2026-11-18 起语义改为「指针 nil=不改、""=清空」，因此本用例用 nil 表达“没传”，
+// 与旧的「空串=不改」区分开——旧语义会让用户永远无法清空非必填字段。
+func TestApplyInstanceUpdate_UnsetKeepsValues(t *testing.T) {
 	inst := domain.Instance{
 		AssetName:  "old-name",
 		Source:     "manual",
@@ -52,14 +53,11 @@ func TestApplyInstanceUpdate_KeepHistoricalSemantics(t *testing.T) {
 	}
 
 	applyInstanceUpdate(&inst, UpdateInstanceReq{
-		AssetName:  "",
-		Source:     "",
-		Owner:      "",
 		Attributes: map[string]interface{}{"ip_address": "10.0.0.2"},
 	})
 
 	if inst.AssetName != "old-name" {
-		t.Fatalf("AssetName = %q, want old-name（空串不改）", inst.AssetName)
+		t.Fatalf("AssetName = %q, want old-name（未传不改）", inst.AssetName)
 	}
 	if inst.Source != "manual" || inst.Owner != "alice" {
 		t.Fatalf("Source/Owner = %q/%q, want manual/alice", inst.Source, inst.Owner)
@@ -78,9 +76,58 @@ func TestApplyInstanceUpdate_KeepHistoricalSemantics(t *testing.T) {
 // TestApplyInstanceUpdate_NonEmptyWins 非空字符串照常覆盖，防止过度收紧。
 func TestApplyInstanceUpdate_NonEmptyWins(t *testing.T) {
 	inst := domain.Instance{AssetName: "old", Source: "manual", Owner: "alice"}
-	applyInstanceUpdate(&inst, UpdateInstanceReq{AssetName: "new", Source: "import", Owner: "bob"})
+	str := func(v string) *string { return &v }
+	applyInstanceUpdate(&inst, UpdateInstanceReq{
+		AssetName: str("new"), Source: str("import"), Owner: str("bob"),
+	})
 
 	if inst.AssetName != "new" || inst.Source != "import" || inst.Owner != "bob" {
 		t.Fatalf("got %q/%q/%q, want new/import/bob", inst.AssetName, inst.Source, inst.Owner)
+	}
+}
+
+// TestApplyInstanceUpdate_ClearOptionalField 锁定 2026-11-18 产品确认的「清空」语义：
+// 显式传空串（顶层字段）或 null（attributes 的键）表示清空；
+// 清空的属性键会从文档中删除，而不仅是置为 null。
+func TestApplyInstanceUpdate_ClearOptionalField(t *testing.T) {
+	empty := ""
+	inst := domain.Instance{
+		Source:     "sync",
+		Owner:      "alice",
+		Attributes: map[string]interface{}{"hostname": "h1", "ip_address": "10.0.0.1"},
+	}
+
+	cleared := applyInstanceUpdate(&inst, UpdateInstanceReq{
+		Source:     &empty,
+		Owner:      &empty,
+		Attributes: map[string]interface{}{"hostname": nil},
+	})
+
+	if inst.Source != "" || inst.Owner != "" {
+		t.Fatalf("Source/Owner = %q/%q, want both cleared", inst.Source, inst.Owner)
+	}
+	if _, ok := inst.Attributes["hostname"]; ok {
+		t.Fatalf("hostname 应被删除，实际仍存在：%v", inst.Attributes["hostname"])
+	}
+	if inst.Attributes["ip_address"] != "10.0.0.1" {
+		t.Fatalf("未提交的 ip_address 应保持原值，实际 %v", inst.Attributes["ip_address"])
+	}
+	if len(cleared) != 1 || cleared[0] != "hostname" {
+		t.Fatalf("cleared = %v, want [hostname]", cleared)
+	}
+}
+
+// TestApplyInstanceUpdate_ClearReportsSortedKeys 清空多个属性时返回稳定顺序，
+// 便于上层拼错误文案与断言。
+func TestApplyInstanceUpdate_ClearReportsSortedKeys(t *testing.T) {
+	inst := domain.Instance{Attributes: map[string]interface{}{"z_field": "1", "a_field": "2", "m_field": "3"}}
+	cleared := applyInstanceUpdate(&inst, UpdateInstanceReq{
+		Attributes: map[string]interface{}{"z_field": nil, "a_field": nil},
+	})
+	if len(cleared) != 2 || cleared[0] != "a_field" || cleared[1] != "z_field" {
+		t.Fatalf("cleared = %v, want [a_field z_field]", cleared)
+	}
+	if len(inst.Attributes) != 1 || inst.Attributes["m_field"] != "3" {
+		t.Fatalf("剩余属性应为 {m_field:3}，实际 %v", inst.Attributes)
 	}
 }

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"sort"
@@ -94,11 +95,11 @@ type UpsertBatchInstanceReq struct {
 // 前端编辑弹窗里「云账号ID」是可编辑项，此前该字段不在请求体里，
 // 导致用户改了账号、提示「更新成功」、实际值不变（静默丢弃）。
 type UpdateInstanceReq struct {
-	AssetName  string                 `json:"asset_name"`
+	AssetName  *string                `json:"asset_name"`
 	AccountID  *int64                 `json:"account_id"`
 	Attributes map[string]interface{} `json:"attributes"`
-	Source     string                 `json:"source"`
-	Owner      string                 `json:"owner"`
+	Source     *string                `json:"source"`
+	Owner      *string                `json:"owner"`
 }
 
 // InstanceVO 实例视图对象
@@ -414,7 +415,17 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
-	applyInstanceUpdate(&existing, req)
+	// 显式提交空资产名称 = 清空主名称，语义上等同于「让资产无法被识别」，直接拒绝。
+	// （source/owner 属可清空的辅助字段，允许置空。）
+	if req.AssetName != nil && strings.TrimSpace(*req.AssetName) == "" {
+		return ErrorResultWithMsg(errs.ParamsError, "资产名称不能清空"), nil
+	}
+
+	cleared := applyInstanceUpdate(&existing, req)
+	// 必填字段显式置空必须拒绝：清空后实例会立刻变成「缺失必填」，且无法再从表单补回原值。
+	if msg := h.rejectClearingRequired(ctx.Request.Context(), existing.ModelUID, cleared); msg != "" {
+		return ErrorResultWithMsg(errs.ParamsError, msg), nil
+	}
 
 	err = h.svc.Update(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), tenantID, existing)
 	if err != nil {
@@ -424,33 +435,78 @@ func (h *InstanceHandler) Update(ctx *gin.Context, req UpdateInstanceReq) (ginx.
 	return Result(nil), nil
 }
 
-// applyInstanceUpdate 把更新请求合并进既有实例。
+// applyInstanceUpdate 把更新请求合并进既有实例，返回被「显式清空」的属性名。
 //
-// 语义（与历史行为保持一致，仅补充 account_id）：
-//   - 字符串字段只在非空时覆盖：空串表示「本次不改」，历史接口没有清空能力；
-//   - attributes 是逐键合并，不是整体替换，因此未提交的键保持原值；
+// 语义（2026-11-18 产品确认，取代此前「空串=不改」的历史行为）：
+//   - asset_name / source / owner 用指针：nil=本次不改，""=清空（asset_name 由调用方拒绝）；
+//   - attributes 是逐键合并：值为 null 表示清空该属性（从文档中删除），未提交的键保持原值；
 //   - account_id 用指针：nil=不改，0=解除关联，非 0=改挂。
-func applyInstanceUpdate(existing *domain.Instance, req UpdateInstanceReq) {
-	if req.AssetName != "" {
-		existing.AssetName = req.AssetName
+//
+// 返回值让调用方能在落库前做「必填字段不许清空」的校验。
+func applyInstanceUpdate(existing *domain.Instance, req UpdateInstanceReq) []string {
+	if req.AssetName != nil {
+		existing.AssetName = *req.AssetName
 	}
 	if req.AccountID != nil {
 		existing.AccountID = *req.AccountID
 	}
-	if req.Source != "" {
-		existing.Source = req.Source
+	if req.Source != nil {
+		existing.Source = *req.Source
 	}
-	if req.Owner != "" {
-		existing.Owner = req.Owner
+	if req.Owner != nil {
+		existing.Owner = *req.Owner
 	}
+
+	var cleared []string
 	if req.Attributes != nil {
 		if existing.Attributes == nil {
 			existing.Attributes = make(map[string]interface{})
 		}
 		for k, v := range req.Attributes {
+			if v == nil {
+				delete(existing.Attributes, k)
+				cleared = append(cleared, k)
+				continue
+			}
 			existing.Attributes[k] = v
 		}
+		sort.Strings(cleared)
 	}
+	return cleared
+}
+
+// rejectClearingRequired 判断本次请求清空的属性里是否含必填字段，返回拒绝文案（空串=放行）。
+//
+// 降级策略：必填定义拉取失败时放行并记日志 —— 与既有「字段定义拉取失败不阻塞表单」一致，
+// 不能让附属查询故障阻断正常的编辑操作。
+func (h *InstanceHandler) rejectClearingRequired(ctx context.Context, modelUID string, cleared []string) string {
+	if len(cleared) == 0 || modelUID == "" {
+		return ""
+	}
+	required, err := h.svc.RequiredAttributeNames(ctx, modelUID)
+	if err != nil {
+		elog.DefaultLogger.Warn("拉取必填字段定义失败，跳过清空校验",
+			elog.String("model_uid", modelUID), elog.FieldErr(err))
+		return ""
+	}
+	if len(required) == 0 {
+		return ""
+	}
+	var names []string
+	for _, key := range cleared {
+		display, ok := required[key]
+		if !ok {
+			continue
+		}
+		if display == "" {
+			display = key
+		}
+		names = append(names, display)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("以下必填字段不能清空：%s", strings.Join(names, "、"))
 }
 
 // Delete 删除实例
