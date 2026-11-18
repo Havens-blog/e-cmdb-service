@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
@@ -243,7 +244,15 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 	modelUID := ctx.Query("model_uid")
 	tenantID := middleware.GetTenantID(ctx)
 	accountIDStr := ctx.Query("account_id")
-	assetName := ctx.Query("asset_name")
+	// keyword：实例列表搜索框（提示语「搜索名称/ID」）的历史叫法，
+	// 作为 asset_name 的兼容别名。
+	//
+	// 背景（实测 2026-11-17）：外部脚本按 keyword=zz-xxx- 过滤后逐条删除，
+	// 但该参数从未被读取 —— 请求被静默降级成「无关键字全量列表」，
+	// 脚本于是删掉了 49 条真实实例。同一类陷阱此前已出现过一次
+	//（asset_id 未被读取，误删 10 条）。宁可多识别一个别名，
+	// 也不能让字面上生效的过滤条件被无声忽略。
+	assetName := resolveInstanceSearchTerm(ctx.Query("asset_name"), ctx.Query("keyword"))
 	status := ctx.Query("status")
 	region := ctx.Query("region")
 	// provider：云厂商。前端实例列表有「云平台」下拉框并传递该参数，
@@ -306,6 +315,18 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, Result(InstanceListResp{Instances: instanceVOs, Total: total}))
+}
+
+// resolveInstanceSearchTerm 决定实例列表的搜索关键字。
+//
+// asset_name 是正式参数；keyword 只是兼容别名，仅在 asset_name 为空时采用。
+// 两者同时出现时以 asset_name 为准，而不是当成两个独立条件 AND ——
+// 这样调用方拿到的是「一个搜索框」的直觉语义，不会因为多传一个参数而意外收窄结果。
+func resolveInstanceSearchTerm(assetName, keyword string) string {
+	if strings.TrimSpace(assetName) != "" {
+		return assetName
+	}
+	return strings.TrimSpace(keyword)
 }
 
 // Update 更新实例
