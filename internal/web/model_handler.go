@@ -1,8 +1,6 @@
 package web
 
 import (
-	"strconv"
-
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 
@@ -144,14 +142,19 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 		return
 	}
 
-	var level int
-	if levelStr != "" {
-		level, _ = strconv.Atoi(levelStr)
+	// level 与 model_group_id 此前解析失败即 0，而 0 表示「不过滤」——传错值等于
+	// 静默丢掉筛选条件（实测 level=abc 返回全部 81 个模型，level=1 才是 41 个）。
+	level64, levelErr := parseNonNegativeInt64(levelStr, "level")
+	if levelErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, levelErr))
+		return
 	}
+	level := int(level64)
 
-	var groupID int64
-	if groupIDStr != "" {
-		groupID, _ = strconv.ParseInt(groupIDStr, 10, 64)
+	groupID, groupErr := parseNonNegativeInt64(groupIDStr, "model_group_id")
+	if groupErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, groupErr))
+		return
 	}
 
 	filter := domain.ModelFilter{

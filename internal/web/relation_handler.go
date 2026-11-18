@@ -459,9 +459,19 @@ func (h *RelationHandler) GetInstanceTopology(ctx *gin.Context) {
 		return
 	}
 
-	depthStr := ctx.DefaultQuery("depth", "1")
-	depth, _ := strconv.Atoi(depthStr)
-	direction := ctx.DefaultQuery("direction", "both")
+	// depth 与 direction 此前都直接取值：depth 解析失败得 0，而 service 的
+	// `query.Depth > 0` 判断把 0 当「不限深度」（internal/service/topology.go:82），
+	// 于是错值把遍历放大成整个连通分量；direction 不在白名单则返回只有根节点的空图。
+	depth, depthErr := parseBoundedInt(ctx.Query("depth"), "depth", 1, 1, maxGraphDepth)
+	if depthErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, depthErr))
+		return
+	}
+	direction, directionErr := parseTopologyDirection(ctx.Query("direction"))
+	if directionErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, directionErr))
+		return
+	}
 	modelUID := ctx.Query("model_uid")
 	tenantID := middleware.GetTenantID(ctx)
 
