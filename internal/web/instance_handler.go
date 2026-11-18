@@ -282,8 +282,12 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 	// 资产 ID 是唯一标识，支持精确匹配既符合直觉，也消除了这个陷阱。
 	assetID := ctx.Query("asset_id")
 
-	offset, _ := strconv.Atoi(ctx.DefaultQuery("offset", "0"))
-	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		// 非法分页不再退化为全量返回（改造前 limit=0/-1/abc 会一次吐出 2 万余条）。
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, pagingErr))
+		return
+	}
 
 	var accountID int64
 	if accountIDStr != "" {
