@@ -289,9 +289,10 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 		return
 	}
 
-	var accountID int64
-	if accountIDStr != "" {
-		accountID, _ = strconv.ParseInt(accountIDStr, 10, 64)
+	accountID, accountErr := parsePositiveInt64(accountIDStr, "account_id")
+	if accountErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, accountErr))
+		return
 	}
 
 	attributes := make(map[string]interface{})

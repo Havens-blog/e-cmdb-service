@@ -384,12 +384,15 @@ func (h *RelationHandler) ListInstanceRelations(ctx *gin.Context) {
 		return
 	}
 
-	var sourceID, targetID int64
-	if sourceIDStr != "" {
-		sourceID, _ = strconv.ParseInt(sourceIDStr, 10, 64)
+	sourceID, sourceErr := parsePositiveInt64(sourceIDStr, "source_instance_id")
+	if sourceErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, sourceErr))
+		return
 	}
-	if targetIDStr != "" {
-		targetID, _ = strconv.ParseInt(targetIDStr, 10, 64)
+	targetID, targetErr := parsePositiveInt64(targetIDStr, "target_instance_id")
+	if targetErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, targetErr))
+		return
 	}
 
 	filter := domain.InstanceRelationFilter{
