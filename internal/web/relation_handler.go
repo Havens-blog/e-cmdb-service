@@ -1,15 +1,17 @@
 package web
 
 import (
+	"errors"
 	"strconv"
+
+	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
+	"github.com/gotomicro/ego/core/elog"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
-	"github.com/Havens-blog/e-common-go/ginx"
-	"github.com/gin-gonic/gin"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // RelationHandler 关系HTTP处理器
@@ -169,7 +171,8 @@ func (h *RelationHandler) CreateModelRelation(ctx *gin.Context, req CreateModelR
 	id, err := h.modelRelSvc.Create(ctx.Request.Context(), rel)
 	if err != nil {
 		if err == errs.ErrRelationExists {
-			return ErrorResultWithMsg(errs.ParamsError, "relation type already exists"), nil
+			return ErrorResultWithMsg(errs.ParamsError,
+				"该关系类型已存在：源模型、目标模型与关系类型不能重复定义"), nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -272,6 +275,24 @@ func (h *RelationHandler) DeleteModelRelation(ctx *gin.Context) {
 
 // ==================== 实例关系处理方法 ====================
 
+// instanceRelationErrorResult 把关系创建的服务层错误翻译成用户能读懂的提示。
+//
+// 服务层用 errs.ErrRelationExists / errs.ErrInstanceNotFound 表达业务拒绝，
+// 此前直接透传英文原文，前端弹窗里显示的是 "relation already exists"、
+// "instance not found: instance_id=999999999"。这些是给最终用户看的文案，
+// 统一在这里翻译，避免每个调用点各写一份。
+func instanceRelationErrorResult(err error) (ginx.Result, bool) {
+	switch {
+	case errors.Is(err, errs.ErrRelationExists):
+		return ErrorResultWithMsg(errs.ParamsError,
+			"该关联关系已存在：源资产与目标资产之间不能重复创建同一关系"), true
+	case errors.Is(err, errs.ErrInstanceNotFound):
+		return ErrorResultWithMsg(errs.ParamsError,
+			"关联的资产不存在或已被删除，请刷新后重试"), true
+	}
+	return ginx.Result{}, false
+}
+
 func (h *RelationHandler) CreateInstanceRelation(ctx *gin.Context, req CreateInstanceRelationReq) (ginx.Result, error) {
 	rel := domain.InstanceRelation{
 		SourceInstanceID: req.SourceInstanceID,
@@ -282,8 +303,8 @@ func (h *RelationHandler) CreateInstanceRelation(ctx *gin.Context, req CreateIns
 
 	id, err := h.relationSvc.Create(ctx.Request.Context(), rel)
 	if err != nil {
-		if err == errs.ErrRelationExists {
-			return ErrorResultWithMsg(errs.ParamsError, "relation already exists"), nil
+		if result, ok := instanceRelationErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -340,6 +361,9 @@ func (h *RelationHandler) CreateBatchInstanceRelation(ctx *gin.Context, req Crea
 
 	count, err := h.relationSvc.CreateBatch(ctx.Request.Context(), rels)
 	if err != nil {
+		if result, ok := instanceRelationErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
