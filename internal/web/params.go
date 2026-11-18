@@ -60,6 +60,24 @@ func parseNonNegativeInt64(raw, name string) (int64, string) {
 	return v, ""
 }
 
+// parsePositiveInt64 解析必须大于 0 的整数 ID，空白时返回 0（0 表示「不过滤」）。
+//
+// 背景（第229轮）：关系列表的 source_instance_id / target_instance_id 此前是把
+// strconv.ParseInt 的错误丢弃，而 DAO 的过滤条件是 `> 0`（internal/repository/dao/relation.go:186/189），
+// 于是 abc、zzz、-5 这类值会让整条筛选条件消失、返回全部关系——用户以为在看某个实例的
+// 关系，实际看到的是全库 1304 条。
+func parsePositiveInt64(raw, name string) (int64, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, ""
+	}
+	v, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil || v < 1 {
+		return 0, fmt.Sprintf("%s 必须是大于 0 的整数（收到 %q）", name, trimmed)
+	}
+	return v, ""
+}
+
 // topologyDirections 是拓扑遍历方向的全集。
 //
 // internal/service/topology.go:87 与 :134 各自判断一个分支，未知取值会让两个分支

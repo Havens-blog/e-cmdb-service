@@ -115,6 +115,47 @@ func TestParseTopologyDirection(t *testing.T) {
 	}
 }
 
+// TestParsePositiveInt64 覆盖关系列表筛选参数：DAO 用 `> 0` 判断是否加过滤条件
+// （internal/repository/dao/relation.go:186/189），所以 0 / 负数 / 非数字都会让
+// 筛选条件整体消失、返回全库关系，必须在此拒绝。
+func TestParsePositiveInt64(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		want    int64
+		wantErr bool
+	}{
+		{"empty means no filter", "", 0, false},
+		{"blank means no filter", "   ", 0, false},
+		{"positive", "1367", 1367, false},
+		{"surrounding spaces tolerated", " 383450 ", 383450, false},
+		{"large id", "9007199254740993", 9007199254740993, false},
+		{"zero rejected", "0", 0, true},
+		{"negative rejected", "-5", 0, true},
+		{"non numeric rejected", "abc", 0, true},
+		{"sql-ish string rejected", "1 OR 1=1", 0, true},
+		{"float rejected", "1.5", 0, true},
+		{"overflow rejected", "99999999999999999999", 0, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, errMsg := parsePositiveInt64(c.raw, "source_instance_id")
+			if c.wantErr {
+				if errMsg == "" {
+					t.Fatalf("parsePositiveInt64(%q) errMsg = \"\", want error", c.raw)
+				}
+				return
+			}
+			if errMsg != "" {
+				t.Fatalf("parsePositiveInt64(%q) errMsg = %q, want no error", c.raw, errMsg)
+			}
+			if got != c.want {
+				t.Fatalf("parsePositiveInt64(%q) = %d, want %d", c.raw, got, c.want)
+			}
+		})
+	}
+}
+
 // TestMaxGraphDepthCoversFrontendUsage 守卫上限常量：前端影响分析允许选到 10 层
 // （views/impact/index.vue 的 el-input-number :max="10"），拓扑页到 3 层。
 // 上限一旦被调低，这两个页面的合法请求会被新校验拒掉。

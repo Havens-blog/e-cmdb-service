@@ -260,7 +260,11 @@ func (h *AttributeHandler) ListAttributes(ctx *gin.Context) {
 	}
 
 	if groupIDStr != "" {
-		groupID, _ := strconv.ParseInt(groupIDStr, 10, 64)
+		groupID, groupErr := parseNonNegativeInt64(groupIDStr, "group_id")
+		if groupErr != "" {
+			ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, groupErr))
+			return
+		}
 		filter.GroupID = groupID
 	}
 
