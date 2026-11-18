@@ -4668,6 +4668,46 @@
           "topology"
         ]
       }
+    },
+    "/api/v1/cmdb/instance-facets": {
+      "get": {
+        "operationId": "get_Facets",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "integer"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/InstanceFacets"
+                    },
+                    "msg": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "成功"
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          },
+          "500": {
+            "description": "服务端错误"
+          }
+        },
+        "tags": [
+          "instance-facets"
+        ]
+      }
     }
   }
 }

@@ -21,6 +21,8 @@ type InstanceRepository interface {
 	Count(ctx context.Context, filter domain.InstanceFilter) (int64, error)
 	// CountByModelUID 按 model_uid 分组统计租户下实例数量（服务端聚合）
 	CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error)
+	// Facets 聚合租户下实例的筛选可选值（provider / region / source）
+	Facets(ctx context.Context, tenantID int64) (*domain.InstanceFacets, error)
 	// CountOrphanInstances 统计孤儿实例数量（model_uid 不在模型表）
 	CountOrphanInstances(ctx context.Context, tenantID int64, knownModelUIDs []string) (int64, error)
 	// ListOrphanInstances 分页拉取孤儿实例
@@ -132,6 +134,30 @@ func (r *instanceRepository) Count(ctx context.Context, filter domain.InstanceFi
 // CountByModelUID 按 model_uid 分组统计租户下实例数量。
 func (r *instanceRepository) CountByModelUID(ctx context.Context, tenantID int64) (map[string]int64, error) {
 	return r.dao.CountByModelUID(ctx, tenantID)
+}
+
+// Facets 聚合租户下实例的筛选可选值（provider / region / source）。
+func (r *instanceRepository) Facets(ctx context.Context, tenantID int64) (*domain.InstanceFacets, error) {
+	facets, err := r.dao.Facets(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	if facets == nil {
+		return &domain.InstanceFacets{}, nil
+	}
+	toDomain := func(buckets []dao.FacetBucket) []domain.InstanceFacetBucket {
+		out := make([]domain.InstanceFacetBucket, 0, len(buckets))
+		for _, b := range buckets {
+			out = append(out, domain.InstanceFacetBucket{Value: b.Value, Count: b.Count})
+		}
+		return out
+	}
+	return &domain.InstanceFacets{
+		Providers: toDomain(facets.Providers),
+		Regions:   toDomain(facets.Regions),
+		Sources:   toDomain(facets.Sources),
+		Total:     facets.Total,
+	}, nil
 }
 
 // CountMissingAttribute 统计某模型下缺少指定属性的实例数。

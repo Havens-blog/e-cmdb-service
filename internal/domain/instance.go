@@ -130,3 +130,22 @@ type BatchDeleteResult struct {
 	Failed  []BatchDeleteItem `json:"failed"`
 	Total   int               `json:"total"` // 请求删除的总条数
 }
+
+// InstanceFacetBucket 一个筛选维度的取值与实例数（服务端聚合结果）。
+type InstanceFacetBucket struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// InstanceFacets 实例列表的筛选可选值。
+//
+// 由服务端聚合租户下全部实例得出，而不是前端从当前页 20 条里推断：
+// 后者会让「区域」下拉只覆盖当前页、「云平台」硬编码取值与库中不一致
+// （2026-11-18 实测：硬编码 volcengine 筛出 0 条，库里是 volcano 7,813 条）。
+// 空值统一用空串表示，由前端显示为「未标注」。
+type InstanceFacets struct {
+	Providers []InstanceFacetBucket `json:"providers"`
+	Regions   []InstanceFacetBucket `json:"regions"`
+	Sources   []InstanceFacetBucket `json:"sources"`
+	Total     int64                 `json:"total"`
+}

@@ -58,6 +58,11 @@ func (f *impactInstanceRepo) CountByModelUID(ctx context.Context, tenantID int64
 	return map[string]int64{}, nil
 }
 
+// Facets 桩实现：本轮新增的筛选可选值聚合（测试中不使用）
+func (f *impactInstanceRepo) Facets(ctx context.Context, tenantID int64) (*domain.InstanceFacets, error) {
+	return &domain.InstanceFacets{}, nil
+}
+
 // CountMissingAttribute 桩实现：数据质量服务端的缺失字段计数（测试中不使用）
 func (f *impactInstanceRepo) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
 	return 0, nil
