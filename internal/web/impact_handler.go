@@ -3,12 +3,13 @@ package web
 import (
 	"strconv"
 
-	"github.com/Havens-blog/e-cmdb-service/internal/errs"
-	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
-	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 	"github.com/gotomicro/ego/core/elog"
+
+	"github.com/Havens-blog/e-cmdb-service/internal/errs"
+	"github.com/Havens-blog/e-cmdb-service/internal/middleware"
+	"github.com/Havens-blog/e-cmdb-service/internal/service"
 )
 
 // ImpactHandler 影响分析（blast radius）HTTP 处理器。
@@ -43,7 +44,12 @@ func (h *ImpactHandler) GetImpact(ctx *gin.Context) (ginx.Result, error) {
 		return ErrorResult(errs.ParamsError), nil
 	}
 
-	depth, _ := strconv.Atoi(ctx.DefaultQuery("depth", "1"))
+	// depth 此前用 strconv.Atoi 后丢弃错误：错值被 service 的 `depth<1 → 1` 静默吃掉，
+	// 用户改了范围却没有任何提示。此处显式校验 1..maxGraphDepth。
+	depth, depthErr := parseBoundedInt(ctx.Query("depth"), "depth", 1, 1, maxGraphDepth)
+	if depthErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, depthErr), nil
+	}
 
 	graph, err := h.svc.GetImpact(ctx.Request.Context(), tenantID, instanceID, depth)
 	if err != nil {
