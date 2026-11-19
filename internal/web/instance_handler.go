@@ -90,9 +90,14 @@ type CreateBatchInstanceReq struct {
 }
 
 // UpsertInstanceReq 更新或插入实例请求
+// UpsertInstanceReq 单条导入/同步写入请求。
+//
+// 这里刻意不加 binding:"required"：gin 的绑定失败会直接返回 HTTP 400 且响应体为空，
+// 前端拿到的是一个没有 code/msg 的 400（弹窗只能提示「接口响应格式错误」）。
+// 校验统一交给 service.Validate，由它返回带中文原因的 400001 信封。
 type UpsertInstanceReq struct {
-	ModelUID   string                 `json:"model_uid" binding:"required"`
-	AssetID    string                 `json:"asset_id" binding:"required"`
+	ModelUID   string                 `json:"model_uid"`
+	AssetID    string                 `json:"asset_id"`
 	AssetName  string                 `json:"asset_name"`
 	AccountID  int64                  `json:"account_id"`
 	Attributes map[string]interface{} `json:"attributes"`
@@ -102,7 +107,8 @@ type UpsertInstanceReq struct {
 
 // UpsertBatchInstanceReq 批量更新或插入实例请求
 type UpsertBatchInstanceReq struct {
-	Instances []UpsertInstanceReq `json:"instances" binding:"required"`
+	// 同理不加 binding:"required"：空数组是无害 no-op，不该变成空响应的 400。
+	Instances []UpsertInstanceReq `json:"instances"`
 }
 
 // UpdateInstanceReq 更新实例请求
@@ -179,6 +185,33 @@ func instanceCreateErrorResult(err error) (ginx.Result, bool) {
 	return ginx.Result{}, false
 }
 
+// instanceWriteErrorResult 把导入/同步写入失败映射成可定位的中文响应。
+//
+// 修复前 ReplaceUpsert 的两个入口一律 ErrorResultWithMsg(errs.SystemError, err.Error())：
+//   - 状态码 500001 让「你传错了数据」看起来像服务端故障；
+//   - 报文是英文哨兵原文（asset id cannot be empty）且没有行号，
+//     导入 50 行时用户无法知道是哪一行、也不知道前面几行是否已经写进去。
+//
+// 现在：调用方数据问题 → 400001 + 中文说明（批量还带行号与已写入条数）；
+// 其余（仓储/网络等）仍按系统错误原样返回，避免把运维需要的信息误译。
+func instanceWriteErrorResult(err error) ginx.Result {
+	// 批量错误必须先整体处理：UpsertBatchError 通过 Unwrap 暴露根因，
+	// 若先走 DescribeInstanceWriteError 会被翻译成「资产ID不能为空」，
+	// 把行号与「已写入 N 条」一起丢掉——那正是这次要补的信息。
+	var batchErr *service.UpsertBatchError
+	if errors.As(err, &batchErr) {
+		code := errs.SystemError
+		if service.IsInstanceWriteValidationError(err) {
+			code = errs.ParamsError
+		}
+		return ErrorResultWithMsg(code, batchErr.Error())
+	}
+	if service.IsInstanceWriteValidationError(err) {
+		return ErrorResultWithMsg(errs.ParamsError, service.DescribeInstanceWriteError(err))
+	}
+	return ErrorResultWithMsg(errs.SystemError, err.Error())
+}
+
 // Create 创建实例
 func (h *InstanceHandler) Create(ctx *gin.Context, req CreateInstanceReq) (ginx.Result, error) {
 	instance := domain.Instance{
@@ -246,7 +279,7 @@ func (h *InstanceHandler) Upsert(ctx *gin.Context, req UpsertInstanceReq) (ginx.
 
 	err := h.svc.Upsert(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instance)
 	if err != nil {
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		return instanceWriteErrorResult(err), nil
 	}
 
 	return Result(nil), nil
@@ -271,7 +304,7 @@ func (h *InstanceHandler) UpsertBatch(ctx *gin.Context, req UpsertBatchInstanceR
 
 	err := h.svc.UpsertBatch(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instances)
 	if err != nil {
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		return instanceWriteErrorResult(err), nil
 	}
 
 	return Result(nil), nil

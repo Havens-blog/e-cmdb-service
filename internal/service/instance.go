@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -226,7 +227,8 @@ func (e *BatchItemError) Unwrap() error { return e.Err }
 // 顺序与历史行为保持一致：字段完整性 → 模型存在 → 必填字段 → 重复检查。
 // 单条与批量必须走同一套，否则 /instances/batch 会绕开必填校验
 // （实测 2026-11-19：ecs 缺 6 个必填字段的条目经批量入口返回 code=0 并落库）。
-func (s *instanceService) validateCreateOne(ctx context.Context, instance domain.Instance) error {
+func (s *instanceService) validateCreateOne(ctx context.Context, instance *domain.Instance) error {
+	instance.Normalize()
 	if err := instance.Validate(); err != nil {
 		return err
 	}
@@ -240,7 +242,7 @@ func (s *instanceService) validateCreateOne(ctx context.Context, instance domain
 	}
 
 	// 新建：按模型字段定义校验，必填缺失直接拒绝
-	if err := s.validateModelAttributes(ctx, instance, true); err != nil {
+	if err := s.validateModelAttributes(ctx, *instance, true); err != nil {
 		return err
 	}
 
@@ -256,7 +258,7 @@ func (s *instanceService) validateCreateOne(ctx context.Context, instance domain
 }
 
 func (s *instanceService) Create(ctx context.Context, instance domain.Instance) (int64, error) {
-	if err := s.validateCreateOne(ctx, instance); err != nil {
+	if err := s.validateCreateOne(ctx, &instance); err != nil {
 		return 0, err
 	}
 
@@ -280,7 +282,10 @@ func (s *instanceService) CreateBatch(ctx context.Context, instances []domain.In
 	// 批内重复（同一 model_uid + asset_id 出现两次）同样要拦：唯一索引会以
 	// E11000 拒绝整批，而调用方拿不到「是第几条冲突」。
 	seen := make(map[string]struct{}, len(instances))
-	for i, inst := range instances {
+	for i := range instances {
+		// 就地归一化：校验与最终写库（repo.CreateBatch(instances)）必须是同一份数据，
+		// 否则 asset_id 首尾空格会在校验时被裁掉、写入时又带回去。
+		inst := &instances[i]
 		if err := s.validateCreateOne(ctx, inst); err != nil {
 			return 0, &BatchItemError{Index: i, ModelUID: inst.ModelUID, AssetID: inst.AssetID, Err: err}
 		}
@@ -557,6 +562,7 @@ func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64
 }
 
 func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) error {
+	instance.Normalize()
 	if err := instance.Validate(); err != nil {
 		return err
 	}
@@ -573,6 +579,70 @@ func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) 
 	return nil
 }
 
+// UpsertBatchError 描述批量写入在第几条失败，以及此前已成功写入的条数。
+//
+// 批量写入沿用「首错中止」语义：某一条写库失败后不再继续，也不回滚已写入的数据
+// （逐条 upsert 没有事务）。因此调用方要能正确恢复，必须同时知道两件事：
+//  1. 是哪一条失败、原因是什么；
+//  2. 这次请求到底已经写进去几条。
+//
+// 修复前这里直接返回底层错误（如 "asset id cannot be empty"），两者都拿不到：
+// 导入场景下用户只看到「导入失败」，而库里其实已经多出若干条记录。
+type UpsertBatchError struct {
+	Index    int // 失败条目在请求中的下标（0 起）
+	ModelUID string
+	AssetID  string
+	Written  int // 本次请求中此条之前已成功写入的条数
+	Total    int // 本次请求的条目总数
+	Err      error
+}
+
+func (e *UpsertBatchError) Error() string {
+	return fmt.Sprintf("第 %d 条（asset_id=%s）写入失败：%s；本次请求共 %d 条，已写入 %d 条，其余未处理",
+		e.Index+1, e.AssetID, DescribeInstanceWriteError(e.Err), e.Total, e.Written)
+}
+
+// Unwrap 让调用方仍可用 errors.Is 判断根因（例如 errs.ErrInvalidAssetID）。
+func (e *UpsertBatchError) Unwrap() error { return e.Err }
+
+// DescribeInstanceWriteError 把写入链路里的英文哨兵错误翻成面向用户的中文。
+//
+// 未识别的错误原样返回：仓储层错误（Mongo 超时等）本来就需要运维视角的原文，
+// 不该被这里误译成业务话术。
+func DescribeInstanceWriteError(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errs.ErrInvalidAssetID):
+		return "资产ID不能为空"
+	case errors.Is(err, errs.ErrInvalidModelUID):
+		return "模型不能为空"
+	case errors.Is(err, errs.ErrInvalidTenantID):
+		return "租户信息缺失，请重新登录后重试"
+	case errors.Is(err, errs.ErrInvalidAttributes):
+		return "字段校验未通过"
+	}
+	return err.Error()
+}
+
+// IsInstanceWriteValidationError 判断是否属于「调用方数据问题」而非服务端故障。
+//
+// 用于让单条写入失败也返回 400 族状态码：修复前所有写入错误都被包成
+// 500001（系统错误），调用方无法区分「我传错了」和「服务端挂了」。
+func IsInstanceWriteValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var batchErr *UpsertBatchError
+	if errors.As(err, &batchErr) {
+		return IsInstanceWriteValidationError(batchErr.Err)
+	}
+	return errors.Is(err, errs.ErrInvalidAssetID) ||
+		errors.Is(err, errs.ErrInvalidModelUID) ||
+		errors.Is(err, errs.ErrInvalidTenantID) ||
+		errors.Is(err, errs.ErrInvalidAttributes)
+}
+
 func (s *instanceService) UpsertBatch(ctx context.Context, instances []domain.Instance) error {
 	// 方案 B（记录但不阻断）：先做一轮 warn-only 字段校验并记录问题清单。
 	// 注意：必须在写库**之前**采集 tenantID，且不因记录失败而中断后续写入。
@@ -580,20 +650,37 @@ func (s *instanceService) UpsertBatch(ctx context.Context, instances []domain.In
 		s.recordSyncQualityIssues(ctx, instances[0].TenantID, instances)
 	}
 
-	for _, inst := range instances {
+	total := len(instances)
+	written := 0
+	for i, inst := range instances {
+		inst.Normalize()
+		// 失败时把「第几条 + 已写入几条」一并带出：首错中止不回滚，
+		// 调用方不知道已写入数量就无法判断该重试整批还是从断点续传。
+		fail := func(err error) error {
+			return &UpsertBatchError{
+				Index:    i,
+				ModelUID: inst.ModelUID,
+				AssetID:  inst.AssetID,
+				Written:  written,
+				Total:    total,
+				Err:      err,
+			}
+		}
 		if err := inst.Validate(); err != nil {
-			return err
+			return fail(err)
 		}
 		existing, hadExisting := s.snapshotBeforeUpsert(ctx, inst)
 		if err := s.repo.Upsert(ctx, inst); err != nil {
 			s.logger.Error("failed to upsert instance",
 				elog.String("asset_id", inst.AssetID),
 				elog.String("model_uid", inst.ModelUID),
+				elog.Int("already_written", written),
 				elog.FieldErr(err),
 			)
-			return err
+			return fail(err)
 		}
 		s.recordUpsertChanges(ctx, inst, existing, hadExisting)
+		written++
 	}
 	return nil
 }
