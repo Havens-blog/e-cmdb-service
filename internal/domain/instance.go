@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -55,6 +56,20 @@ type InstanceFilter struct {
 }
 
 // Validate 验证实例数据
+// Normalize 归一化能影响唯一性的标识字段。
+//
+// 修复前 asset_id 只做「非空」判断、不做 TrimSpace：POST /instances/upsert 传
+// asset_id 为若干空格（"   "）能通过校验并成功入库，产生一条 asset_id 全是空格、
+// 界面上看起来「没有资产ID」的实例，也无法再用正常搜索命中它。
+// 标识字段的空格没有任何业务语义，统一在写库前裁掉。
+func (i *Instance) Normalize() {
+	i.ModelUID = strings.TrimSpace(i.ModelUID)
+	i.AssetID = strings.TrimSpace(i.AssetID)
+	i.AssetName = strings.TrimSpace(i.AssetName)
+	i.Source = strings.TrimSpace(i.Source)
+	i.Owner = strings.TrimSpace(i.Owner)
+}
+
 func (i *Instance) Validate() error {
 	if i.ModelUID == "" {
 		return errs.ErrInvalidModelUID
