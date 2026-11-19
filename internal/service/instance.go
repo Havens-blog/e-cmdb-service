@@ -326,14 +326,19 @@ func (s *instanceService) recordCreationChanges(ctx context.Context, instances [
 	now := time.Now().UnixMilli()
 
 	pending := make([]domain.ChangeRecord, 0, len(instances))
+	// chunkIndex 从 1 开始，用于把失败定位到具体切块：日志里的 chunk_record_count 只描述
+	// 这一块，而 batch_instance_count 描述整个批次，两者不能混用同一字段名（评审 #1）。
+	chunkIndex := 0
 	flush := func() {
 		if len(pending) == 0 {
 			return
 		}
+		chunkIndex++
 		if err := s.changeHistoryRepo.BatchCreate(ctx, pending); err != nil {
 			s.logger.Warn("批量创建审计变更记录写入失败",
-				elog.Int("instance_count", len(instances)),
-				elog.Int("record_count", len(pending)),
+				elog.Int("batch_instance_count", len(instances)),
+				elog.Int("chunk_index", chunkIndex),
+				elog.Int("chunk_record_count", len(pending)),
 				elog.FieldErr(err))
 		}
 		pending = pending[:0]
