@@ -301,7 +301,68 @@ func (s *instanceService) CreateBatch(ctx context.Context, instances []domain.In
 		seen[key] = struct{}{}
 	}
 
-	return s.repo.CreateBatch(ctx, instances)
+	count, err := s.repo.CreateBatch(ctx, instances)
+	if err != nil {
+		return 0, err
+	}
+
+	// 创建审计：批量入口过去只写库、从不写审计，导致「同一批资产批量建了」在
+	// ecam_change_history 里完全查不到，与单条 Create / 导入 upsert 的口径不一致
+	// （同类审计缺口见 2026-11-02 导入通路修复）。写库成功后才写审计，且审计失败
+	// 只记日志（非阻断）：审计挂了不能让已入库的数据看起来像失败。
+	s.recordCreationChanges(ctx, instances)
+	return count, nil
+}
+
+// recordCreationChanges 为批量创建的实例补写「创建」审计（全部字段视为新增）。
+//
+// 与单条 Create 的差异只在写入方式：这里把所有实例的字段变更合并成一次批量写，
+// 并按 changeRecordChunkSize 切块，避免一次请求携带过多文档（批量上限即批次上限）。
+func (s *instanceService) recordCreationChanges(ctx context.Context, instances []domain.Instance) {
+	if s.changeHistoryRepo == nil || len(instances) == 0 {
+		return
+	}
+	operator := middleware.OperatorFrom(ctx)
+	now := time.Now().UnixMilli()
+
+	pending := make([]domain.ChangeRecord, 0, len(instances))
+	flush := func() {
+		if len(pending) == 0 {
+			return
+		}
+		if err := s.changeHistoryRepo.BatchCreate(ctx, pending); err != nil {
+			s.logger.Warn("批量创建审计变更记录写入失败",
+				elog.Int("instance_count", len(instances)),
+				elog.Int("record_count", len(pending)),
+				elog.FieldErr(err))
+		}
+		pending = pending[:0]
+	}
+
+	for _, inst := range instances {
+		meta := changeMetaFromInstance(inst, domain.ChangeSourceManual)
+		for _, c := range domain.DiffAttributes(nil, inst.Attributes) {
+			pending = append(pending, domain.ChangeRecord{
+				AssetID:      meta.AssetID,
+				AssetName:    meta.AssetName,
+				ModelUID:     meta.ModelUID,
+				TenantID:     meta.TenantID,
+				AccountID:    meta.AccountID,
+				Provider:     meta.Provider,
+				Region:       meta.Region,
+				FieldName:    c.FieldName,
+				OldValue:     c.OldValue,
+				NewValue:     c.NewValue,
+				ChangeSource: meta.ChangeSource,
+				Operator:     operator,
+				Ctime:        now,
+			})
+			if len(pending) >= changeRecordChunkSize {
+				flush()
+			}
+		}
+	}
+	flush()
 }
 
 func (s *instanceService) Update(ctx context.Context, tenantID int64, instance domain.Instance) error {
@@ -470,6 +531,12 @@ func toStr(v interface{}) string {
 	}
 	return ""
 }
+
+// changeRecordChunkSize 是单次 BatchCreate 写入的变更记录上限。
+//
+// 批量创建 1000 条实例、每条 10 个字段就是 1 万条审计；一次性下发会让单个请求体
+// 过大（也更容易被 Mongo 的 16MB 文档/内存限制打到），因此按块切分。
+const changeRecordChunkSize = 500
 
 // recordChanges 把字段变更（变更前后值）写入 ecam_change_history。
 //

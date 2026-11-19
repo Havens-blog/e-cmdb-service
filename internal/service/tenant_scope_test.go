@@ -24,6 +24,8 @@ type fakeInstanceRepo struct {
 	// listByModel 可选：按 model_uid 返回固定列表（用于 DeriveRelations 等测试）。
 	// 为 nil 时 List 走原逻辑（返回 nil），不影响既有测试。
 	listByModel map[string][]domain.Instance
+	// createBatchErr 可选：让 CreateBatch 返回错误（用于验证写库失败不写审计）。
+	createBatchErr error
 }
 
 func newFakeInstanceRepo() *fakeInstanceRepo {
@@ -34,7 +36,10 @@ func (f *fakeInstanceRepo) Create(ctx context.Context, instance domain.Instance)
 	return 0, nil
 }
 func (f *fakeInstanceRepo) CreateBatch(ctx context.Context, instances []domain.Instance) (int64, error) {
-	return 0, nil
+	if f.createBatchErr != nil {
+		return 0, f.createBatchErr
+	}
+	return int64(len(instances)), nil
 }
 func (f *fakeInstanceRepo) Update(ctx context.Context, tenantID int64, instance domain.Instance) error {
 	f.updatedTenant = tenantID
