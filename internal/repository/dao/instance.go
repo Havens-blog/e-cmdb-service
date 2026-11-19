@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"time"
 
@@ -208,6 +209,15 @@ func (d *instanceDAO) CreateBatch(ctx context.Context, instances []Instance) (in
 
 	result, err := d.db.Collection(InstanceCollection).InsertMany(ctx, docs)
 	if err != nil {
+		// 有序插入：失败点之前的文档已经写入。把「已写入条数」一并返回，调用方
+		// 才能对这部分补审计（否则部分成功的数据在审计里完全不存在）。
+		var bulkErr mongo.BulkWriteException
+		if errors.As(err, &bulkErr) && len(bulkErr.WriteErrors) > 0 {
+			idx := bulkErr.WriteErrors[0].Index
+			if idx >= 0 && idx <= len(docs) {
+				return int64(idx), err
+			}
+		}
 		return 0, err
 	}
 

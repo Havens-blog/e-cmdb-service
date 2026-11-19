@@ -264,4 +264,32 @@ func TestInstanceAuditBatchCreate(t *testing.T) {
 			t.Fatalf("返回条数应为 1，实际 %d", count)
 		}
 	})
+
+	t.Run("有序批量插入中途失败时仍为已落库前缀补审计", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		instRepo.createBatchErr = errors.New("E11000 duplicate key")
+		// 第 2 条冲突：第 1 条已落库，DAO 返回已写入 1 条。
+		instRepo.createBatchErrCount = 1
+		chRepo := &fakeChangeHistoryRepo{}
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		count, err := svc.CreateBatch(context.Background(), []domain.Instance{
+			{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-ok", Attributes: map[string]interface{}{"note": "v1", "cpu": 2}},
+			{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-dup", Attributes: map[string]interface{}{"note": "v2"}},
+		})
+		if err == nil {
+			t.Fatal("部分失败仍应上抛错误")
+		}
+		if count != 1 {
+			t.Fatalf("已写入条数应为 1，实际 %d", count)
+		}
+		if len(chRepo.records) != 2 {
+			t.Fatalf("应只为已落库的第 1 条写 2 条字段审计，实际 %d 条: %+v", len(chRepo.records), chRepo.records)
+		}
+		for _, r := range chRepo.records {
+			if r.AssetID != "i-ok" {
+				t.Fatalf("审计不应覆盖未落库的条目: %+v", r)
+			}
+		}
+	})
 }

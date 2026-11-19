@@ -26,6 +26,9 @@ type fakeInstanceRepo struct {
 	listByModel map[string][]domain.Instance
 	// createBatchErr 可选：让 CreateBatch 返回错误（用于验证写库失败不写审计）。
 	createBatchErr error
+	// createBatchErrCount 与 createBatchErr 搭配：模拟「有序批量插入中途失败」时
+	// 已经写入的条数（DAO 在 BulkWriteException 上会返回失败点下标）。
+	createBatchErrCount int64
 }
 
 func newFakeInstanceRepo() *fakeInstanceRepo {
@@ -37,7 +40,7 @@ func (f *fakeInstanceRepo) Create(ctx context.Context, instance domain.Instance)
 }
 func (f *fakeInstanceRepo) CreateBatch(ctx context.Context, instances []domain.Instance) (int64, error) {
 	if f.createBatchErr != nil {
-		return 0, f.createBatchErr
+		return f.createBatchErrCount, f.createBatchErr
 	}
 	return int64(len(instances)), nil
 }

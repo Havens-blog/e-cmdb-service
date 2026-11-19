@@ -303,7 +303,13 @@ func (s *instanceService) CreateBatch(ctx context.Context, instances []domain.In
 
 	count, err := s.repo.CreateBatch(ctx, instances)
 	if err != nil {
-		return 0, err
+		// 有序批量插入可能在中途失败：前面若干条已经落库，只是调用方拿到错误。
+		// 这些已落库的条目同样要有创建审计（否则正是本次要补的缺口），因此按
+		// repo 返回的实际写入条数补写前缀，再把错误原样上抛。
+		if count > 0 && count <= int64(len(instances)) {
+			s.recordCreationChanges(ctx, instances[:count])
+		}
+		return count, err
 	}
 
 	// 创建审计：批量入口过去只写库、从不写审计，导致「同一批资产批量建了」在
@@ -346,25 +352,9 @@ func (s *instanceService) recordCreationChanges(ctx context.Context, instances [
 
 	for _, inst := range instances {
 		meta := changeMetaFromInstance(inst, domain.ChangeSourceManual)
-		for _, c := range domain.DiffAttributes(nil, inst.Attributes) {
-			pending = append(pending, domain.ChangeRecord{
-				AssetID:      meta.AssetID,
-				AssetName:    meta.AssetName,
-				ModelUID:     meta.ModelUID,
-				TenantID:     meta.TenantID,
-				AccountID:    meta.AccountID,
-				Provider:     meta.Provider,
-				Region:       meta.Region,
-				FieldName:    c.FieldName,
-				OldValue:     c.OldValue,
-				NewValue:     c.NewValue,
-				ChangeSource: meta.ChangeSource,
-				Operator:     operator,
-				Ctime:        now,
-			})
-			if len(pending) >= changeRecordChunkSize {
-				flush()
-			}
+		pending = append(pending, buildChangeRecords(meta, domain.DiffAttributes(nil, inst.Attributes), operator, now)...)
+		if len(pending) >= changeRecordChunkSize {
+			flush()
 		}
 	}
 	flush()
@@ -543,23 +533,12 @@ func toStr(v interface{}) string {
 // 过大（也更容易被 Mongo 的 16MB 文档/内存限制打到），因此按块切分。
 const changeRecordChunkSize = 500
 
-// recordChanges 把字段变更（变更前后值）写入 ecam_change_history。
+// buildChangeRecords 把一组字段变更映射成审计记录。
 //
-// 需求（2026-11-02 产品确认）：审计需覆盖「变更前后值」。与 e-cam 共享
-// 同一集合，供现有 /api/v1/cam/audit/changes 面板消费。
-//
-// 非阻断：审计写入失败只记日志，绝不影响业务操作（审计挂了不能导致 CRUD 挂）。
-// oldAttrs / newAttrs 为 nil 分别表示「创建」（全新增）与「删除」（全移除）。
-func (s *instanceService) recordChanges(ctx context.Context, meta domain.ChangeMetadata, oldAttrs, newAttrs map[string]interface{}) {
-	if s.changeHistoryRepo == nil {
-		return
-	}
-	changes := domain.DiffAttributes(oldAttrs, newAttrs)
-	if len(changes) == 0 {
-		return
-	}
-	now := time.Now().UnixMilli()
-	operator := middleware.OperatorFrom(ctx)
+// 单条写（recordChanges）与批量创建（recordCreationChanges）共用这一处映射：
+// ChangeRecord 的字段一旦增减，两条路径必须同时生效，否则同一个操作用不同入口
+// 进来的审计口径就会分叉。
+func buildChangeRecords(meta domain.ChangeMetadata, changes []domain.FieldChange, operator string, now int64) []domain.ChangeRecord {
 	records := make([]domain.ChangeRecord, len(changes))
 	for i, c := range changes {
 		records[i] = domain.ChangeRecord{
@@ -578,6 +557,25 @@ func (s *instanceService) recordChanges(ctx context.Context, meta domain.ChangeM
 			Ctime:        now,
 		}
 	}
+	return records
+}
+
+// recordChanges 把字段变更（变更前后值）写入 ecam_change_history。
+//
+// 需求（2026-11-02 产品确认）：审计需覆盖「变更前后值」。与 e-cam 共享
+// 同一集合，供现有 /api/v1/cam/audit/changes 面板消费。
+//
+// 非阻断：审计写入失败只记日志，绝不影响业务操作（审计挂了不能导致 CRUD 挂）。
+// oldAttrs / newAttrs 为 nil 分别表示「创建」（全新增）与「删除」（全移除）。
+func (s *instanceService) recordChanges(ctx context.Context, meta domain.ChangeMetadata, oldAttrs, newAttrs map[string]interface{}) {
+	if s.changeHistoryRepo == nil {
+		return
+	}
+	changes := domain.DiffAttributes(oldAttrs, newAttrs)
+	if len(changes) == 0 {
+		return
+	}
+	records := buildChangeRecords(meta, changes, middleware.OperatorFrom(ctx), time.Now().UnixMilli())
 	if err := s.changeHistoryRepo.BatchCreate(ctx, records); err != nil {
 		s.logger.Warn("审计变更记录写入失败",
 			elog.String("asset_id", meta.AssetID),
