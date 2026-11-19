@@ -67,7 +67,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
-	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo)
+	// instRelRepo：删除模型关系类型前统计在用资产关系（跨租户），用于删除保护
+	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo, relationRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)
 	attributeSvc := service.NewAttributeService(attributeRepo, attributeGroupRepo, modelRepo)
