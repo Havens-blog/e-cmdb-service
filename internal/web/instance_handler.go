@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -335,9 +334,7 @@ func (h *InstanceHandler) GetByID(ctx *gin.Context) {
 // List 获取实例列表
 func (h *InstanceHandler) List(ctx *gin.Context) {
 	// 白名单校验放在最前面：未知参数直接报错，而不是被静默丢弃后返回全量。
-	if unknown := unsupportedInstanceListParams(ctx.Request.URL.Query()); len(unknown) > 0 {
-		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError,
-			fmt.Sprintf("unsupported query parameter(s): %s", strings.Join(unknown, ", "))))
+	if rejectUnsupportedQuery(ctx, instanceListParamSet) {
 		return
 	}
 	// uid：模型 uid 的兼容别名（部分页面按资产搜索时传 uid=）。
@@ -438,37 +435,25 @@ func (h *InstanceHandler) List(ctx *gin.Context) {
 // 真实实例；同类陷阱 2026-11-01 因 asset_id 未被读取已出现过一次（误删 10 条）。
 // 与其不断补别名，不如让「传了不支持的参数」变成显式错误：过滤条件要么生效，
 // 要么立刻报错，绝不安静地退化成全量查询。
-var instanceListParamSet = map[string]struct{}{
+var instanceListParamSet = newParamSet(
 	// 分页与排序
-	"offset": {}, "limit": {}, "sort_by": {}, "order": {},
+	"offset", "limit", "sort_by", "order",
 	// 搜索（asset_name 为正式参数，keyword 为兼容别名）
-	"asset_name": {}, "keyword": {},
+	"asset_name", "keyword",
 	// 精确定位与归属
-	"asset_id": {}, "model_uid": {}, "uid": {}, "account_id": {}, "tenant_id": {},
+	"asset_id", "model_uid", "uid", "account_id", "tenant_id",
 	// 顶层字段筛选
-	"status": {}, "region": {}, "provider": {}, "source": {}, "owner": {},
+	"status", "region", "provider", "source", "owner",
 	// 动态属性筛选（映射到 attributes.<key>）
-	"zone": {}, "vpc_id": {}, "instance_type": {}, "os_type": {},
-	"charge_type": {}, "private_ip": {}, "public_ip": {}, "project_id": {},
-}
+	"zone", "vpc_id", "instance_type", "os_type",
+	"charge_type", "private_ip", "public_ip", "project_id",
+)
 
 // instanceListAttributeParams 是走 attributes 精确匹配的参数名。
 // 这些属性在实例文档里是嵌套字段，与 status/region/provider 同类。
 var instanceListAttributeParams = []string{
 	"zone", "vpc_id", "instance_type", "os_type",
 	"charge_type", "private_ip", "public_ip", "project_id",
-}
-
-// unsupportedInstanceListParams 返回请求里不在白名单内的参数名（升序）。
-func unsupportedInstanceListParams(query url.Values) []string {
-	unknown := make([]string, 0, len(query))
-	for key := range query {
-		if _, ok := instanceListParamSet[key]; !ok {
-			unknown = append(unknown, key)
-		}
-	}
-	sort.Strings(unknown)
-	return unknown
 }
 
 // resolveInstanceModelFilter 决定实例列表的模型过滤条件。

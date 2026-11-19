@@ -22,26 +22,26 @@ func TestUnsupportedInstanceListParams(t *testing.T) {
 			"sort_by":    {"id"},
 			"order":      {"desc"},
 		}
-		if got := unsupportedInstanceListParams(q); len(got) != 0 {
+		if got := unsupportedQueryParams(q, instanceListParamSet); len(got) != 0 {
 			t.Fatalf("unknown = %v, want none", got)
 		}
 	})
 
 	t.Run("拼错的过滤参数必须被报出来", func(t *testing.T) {
-		if got := unsupportedInstanceListParams(url.Values{"bogus": {"x"}}); !reflect.DeepEqual(got, []string{"bogus"}) {
+		if got := unsupportedQueryParams(url.Values{"bogus": {"x"}}, instanceListParamSet); !reflect.DeepEqual(got, []string{"bogus"}) {
 			t.Fatalf("unknown = %v, want [bogus]", got)
 		}
 	})
 
 	t.Run("多个未知参数按字典序返回", func(t *testing.T) {
 		q := url.Values{"zz": {"1"}, "aa": {"2"}, "asset_name": {"ok"}}
-		if got := unsupportedInstanceListParams(q); !reflect.DeepEqual(got, []string{"aa", "zz"}) {
+		if got := unsupportedQueryParams(q, instanceListParamSet); !reflect.DeepEqual(got, []string{"aa", "zz"}) {
 			t.Fatalf("unknown = %v, want [aa zz]", got)
 		}
 	})
 
 	t.Run("keyword 是已知参数（第223轮别名）", func(t *testing.T) {
-		if got := unsupportedInstanceListParams(url.Values{"keyword": {"zz-p223-"}}); len(got) != 0 {
+		if got := unsupportedQueryParams(url.Values{"keyword": {"zz-p223-"}}, instanceListParamSet); len(got) != 0 {
 			t.Fatalf("keyword 应被接受，实际 unknown = %v", got)
 		}
 	})
@@ -51,13 +51,13 @@ func TestUnsupportedInstanceListParams(t *testing.T) {
 		for _, key := range instanceListAttributeParams {
 			q.Set(key, "v")
 		}
-		if got := unsupportedInstanceListParams(q); len(got) != 0 {
+		if got := unsupportedQueryParams(q, instanceListParamSet); len(got) != 0 {
 			t.Fatalf("属性参数应被接受，实际 unknown = %v", got)
 		}
 	})
 
 	t.Run("空查询不被判为未知", func(t *testing.T) {
-		if got := unsupportedInstanceListParams(url.Values{}); len(got) != 0 {
+		if got := unsupportedQueryParams(url.Values{}, instanceListParamSet); len(got) != 0 {
 			t.Fatalf("unknown = %v, want none", got)
 		}
 	})

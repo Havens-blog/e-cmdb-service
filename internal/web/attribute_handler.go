@@ -243,6 +243,10 @@ func (h *AttributeHandler) GetAttribute(ctx *gin.Context) {
 
 // ListAttributes 获取属性列表
 func (h *AttributeHandler) ListAttributes(ctx *gin.Context) {
+	// 实测（2026-11-19）：?bogus=1 返回全部 17 个属性，调用方无从发现拼写错误。
+	if rejectUnsupportedQuery(ctx, attributeListParamSet) {
+		return
+	}
 	modelUID := ctx.Param("uid")
 	groupIDStr := ctx.Query("group_id")
 	fieldType := ctx.Query("field_type")
