@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -142,6 +143,42 @@ type InstanceListResp struct {
 	Total     int64        `json:"total"`
 }
 
+// instanceCreateErrorResult 把创建/批量创建的错误映射成可读的中文结果。
+//
+// 修复前的问题（实测 2026-11-19）：
+//   - 单条重复：{"code":400001,"msg":"instance already exists"} —— 英文，且不说明哪个资产；
+//   - 批量重复：{"code":500001,"msg":"bulk write exception: write errors: [E11000 duplicate key
+//     error collection: ecam.ecam_instance index: tenant_id_1_model_uid_1_asset_id_1 dup key: ...]"}
+//     —— 把集合名、索引名、租户与模型内部信息直接抛给调用方；
+//   - 必填缺失：被当成系统错误（500001），实际是调用方输入问题。
+//
+// 批量失败时带上「第 N 条（asset_id=…）」，让调用方能定位并重试。
+func instanceCreateErrorResult(err error) (ginx.Result, bool) {
+	prefix := ""
+	var batchErr *service.BatchItemError
+	if errors.As(err, &batchErr) {
+		prefix = fmt.Sprintf("第 %d 条（asset_id=%s）：", batchErr.Index+1, batchErr.AssetID)
+		err = batchErr.Err
+	}
+
+	switch {
+	case errors.Is(err, errs.ErrModelNotFound):
+		// 沿用单条创建既有契约（model not found → 404001），批量入口此前是 500001
+		return ErrorResultWithMsg(errs.ModelNotFound, prefix+"模型不存在，请先选择有效的模型"), true
+	case errors.Is(err, errs.ErrInstanceExists):
+		return ErrorResultWithMsg(errs.ParamsError, prefix+"该资产已存在：同一模型下 asset_id 不能重复"), true
+	case errors.Is(err, errs.ErrInvalidAttributes):
+		msg := strings.TrimPrefix(err.Error(), errs.ErrInvalidAttributes.Error()+": ")
+		return ErrorResultWithMsg(errs.ParamsError, prefix+"字段校验未通过："+msg), true
+	}
+
+	// 兜底：并发/竞态下仍可能撞唯一索引，不要把 E11000 原文抛给调用方。
+	if strings.Contains(err.Error(), "E11000 duplicate key") {
+		return ErrorResultWithMsg(errs.ParamsError, prefix+"该资产已存在：同一模型下 asset_id 不能重复"), true
+	}
+	return ginx.Result{}, false
+}
+
 // Create 创建实例
 func (h *InstanceHandler) Create(ctx *gin.Context, req CreateInstanceReq) (ginx.Result, error) {
 	instance := domain.Instance{
@@ -157,11 +194,8 @@ func (h *InstanceHandler) Create(ctx *gin.Context, req CreateInstanceReq) (ginx.
 
 	id, err := h.svc.Create(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instance)
 	if err != nil {
-		if err == errs.ErrModelNotFound {
-			return ErrorResult(errs.ModelNotFound), nil
-		}
-		if err == errs.ErrInstanceExists {
-			return ErrorResultWithMsg(errs.ParamsError, "instance already exists"), nil
+		if result, ok := instanceCreateErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -186,8 +220,11 @@ func (h *InstanceHandler) CreateBatch(ctx *gin.Context, req CreateBatchInstanceR
 		}
 	}
 
-	count, err := h.svc.CreateBatch(ctx.Request.Context(), instances)
+	count, err := h.svc.CreateBatch(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instances)
 	if err != nil {
+		if result, ok := instanceCreateErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
