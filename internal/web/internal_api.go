@@ -7,6 +7,7 @@ import (
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
+	"github.com/Havens-blog/e-cmdb-service/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,13 +18,14 @@ import (
 // 仅内网网关可达；租户由调用方（e-cam-service，已在网关后完成会话校验）在请求体/
 // 查询参数显式传入——这是服务间可信调用，不走 RequireTenant。
 type InternalAPIHandler struct {
-	repo   repository.InstanceRepository
-	models repository.ModelRepository
+	repo    repository.InstanceRepository
+	models  repository.ModelRepository
+	topoSvc service.TopologyService
 }
 
 // NewInternalAPIHandler 创建内部 API 处理器。
-func NewInternalAPIHandler(repo repository.InstanceRepository, models repository.ModelRepository) *InternalAPIHandler {
-	return &InternalAPIHandler{repo: repo, models: models}
+func NewInternalAPIHandler(repo repository.InstanceRepository, models repository.ModelRepository, topoSvc service.TopologyService) *InternalAPIHandler {
+	return &InternalAPIHandler{repo: repo, models: models, topoSvc: topoSvc}
 }
 
 // ---- wire DTO：与 e-cam-service port 包的结构镜像，JSON tag 为跨服务契约 ----
@@ -75,6 +77,7 @@ func (h *InternalAPIHandler) RegisterRoutes(r *gin.RouterGroup) {
 		g.GET("/stats/all", h.StatsAll)
 		g.GET("/stats/unbound", h.StatsUnbound)
 		g.GET("/model-aliases", h.ModelAliases)
+		g.GET("/topology/instance/:id", h.InstanceTopology)
 	}
 }
 
@@ -151,6 +154,7 @@ func (h *InternalAPIHandler) ListInstances(c *gin.Context) {
 	modelUID := c.Query("model_uid")
 	assetName := c.Query("asset_name")
 	provider := c.Query("provider")
+	assetID := c.Query("asset_id")
 	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
 	if errMsg != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
@@ -165,6 +169,7 @@ func (h *InternalAPIHandler) ListInstances(c *gin.Context) {
 	filter := domain.InstanceFilter{
 		ModelUID:  modelUID,
 		AssetName: assetName,
+		AssetID:   assetID,
 		TenantID:  tenantID,
 		Limit:     limit,
 	}
@@ -289,4 +294,38 @@ func clampInternalLimit(limit int64, present bool) int64 {
 		return internalListMaxLimit
 	}
 	return limit
+}
+
+// InstanceTopology GET /internal/topology/instance/:id 返回以指定实例为起点的
+// 实例拓扑图（nodes+edges）。与 /api/v1/cmdb/topology/instance/:id 共用同一个
+// topologySvc，但走服务间可信调用：租户由调用方在 query 显式传入（tenant_id），
+// 与本组其余端点契约一致，供 OpsAgent 等机器调用方查询资源拓扑。
+func (h *InternalAPIHandler) InstanceTopology(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid instance id"})
+		return
+	}
+	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	depth, _, errMsg := parseIntQuery(c, "depth")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	query := domain.TopologyQuery{
+		InstanceID: id,
+		TenantID:   tenantID,
+		Depth:      int(depth),
+		Direction:  c.DefaultQuery("direction", "both"),
+	}
+	graph, gerr := h.topoSvc.GetInstanceTopology(c.Request.Context(), query)
+	if gerr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"nodes": graph.Nodes, "edges": graph.Edges})
 }

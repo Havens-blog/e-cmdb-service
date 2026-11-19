@@ -84,7 +84,7 @@ func InitModule(db *mongox.Mongo) *Module {
 	qualityHandler := web.NewQualityHandler(qualitySvc)
 	openAPIHandler := web.NewOpenAPIHandler(openAPISvc)
 	impactHandler := web.NewImpactHandler(impactSvc)
-	internalAPI := web.NewInternalAPIHandler(instanceRepo, modelRepo)
+	internalAPI := web.NewInternalAPIHandler(instanceRepo, modelRepo, topologySvc)
 
 	return &Module{
 		InstanceHandler:   instanceHandler,
