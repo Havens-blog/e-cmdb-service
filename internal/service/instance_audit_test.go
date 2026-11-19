@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
@@ -179,6 +180,115 @@ func TestInstanceAudit(t *testing.T) {
 		for _, r := range chRepo.records {
 			if r.Operator != "" {
 				t.Fatalf("无 operator 时应为空: %+v", r)
+			}
+		}
+	})
+}
+
+// TestInstanceAuditBatchCreate 锁定「批量创建也要写变更审计」。
+//
+// 背景（2026-11-20）：CreateBatch 只写库、从不调用 recordChanges，实测单条创建
+// 1 条实例产生 5 条审计、批量创建 1 条实例产生 0 条，审计面板完全看不到批量建
+// 的资产。本测试补齐回归守卫。
+func TestInstanceAuditBatchCreate(t *testing.T) {
+	t.Run("批量创建为每条实例写入全部字段为新增", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		chRepo := &fakeChangeHistoryRepo{}
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		_, err := svc.CreateBatch(context.Background(), []domain.Instance{
+			{
+				TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-b1", AssetName: "批量1",
+				Attributes: map[string]interface{}{"note": "v1", "cpu": 2},
+			},
+			{
+				TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-b2", AssetName: "批量2",
+				Attributes: map[string]interface{}{"note": "v2"},
+			},
+		})
+		if err != nil {
+			t.Fatalf("批量创建应成功: %v", err)
+		}
+		if len(chRepo.records) != 3 {
+			t.Fatalf("应为 2 条实例写入 3 条字段审计，实际 %d 条: %+v", len(chRepo.records), chRepo.records)
+		}
+		perAsset := make(map[string]int, 2)
+		for _, r := range chRepo.records {
+			perAsset[r.AssetID]++
+			if r.ChangeSource != domain.ChangeSourceManual {
+				t.Fatalf("批量创建 change_source 应为 manual: %+v", r)
+			}
+			if r.OldValue != "" {
+				t.Fatalf("新增字段 OldValue 应为空: %+v", r)
+			}
+			if r.TenantID != 3 {
+				t.Fatalf("审计租户应为 3: %+v", r)
+			}
+			if r.ModelUID != "huawei_ecs" {
+				t.Fatalf("审计模型应为 huawei_ecs: %+v", r)
+			}
+		}
+		if perAsset["i-b1"] != 2 || perAsset["i-b2"] != 1 {
+			t.Fatalf("每条实例的字段审计数不对: %+v", perAsset)
+		}
+	})
+
+	t.Run("批量写库失败时不写审计", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		instRepo.createBatchErr = errors.New("boom")
+		chRepo := &fakeChangeHistoryRepo{}
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		if _, err := svc.CreateBatch(context.Background(), []domain.Instance{
+			{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-b3", Attributes: map[string]interface{}{"note": "v1"}},
+		}); err == nil {
+			t.Fatal("写库失败应返回错误")
+		}
+		if len(chRepo.records) != 0 {
+			t.Fatalf("写库失败不应写审计，实际 %d 条", len(chRepo.records))
+		}
+	})
+
+	t.Run("审计写入失败不影响批量创建结果", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		chRepo := &fakeChangeHistoryRepo{err: errors.New("audit down")}
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		count, err := svc.CreateBatch(context.Background(), []domain.Instance{
+			{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-b4", Attributes: map[string]interface{}{"note": "v1"}},
+		})
+		if err != nil {
+			t.Fatalf("审计失败不应让批量创建失败: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("返回条数应为 1，实际 %d", count)
+		}
+	})
+
+	t.Run("有序批量插入中途失败时仍为已落库前缀补审计", func(t *testing.T) {
+		instRepo := newFakeInstanceRepo()
+		instRepo.createBatchErr = errors.New("E11000 duplicate key")
+		// 第 2 条冲突：第 1 条已落库，DAO 返回已写入 1 条。
+		instRepo.createBatchErrCount = 1
+		chRepo := &fakeChangeHistoryRepo{}
+		svc := NewInstanceService(instRepo, &fakeModelRepo{getByUID: domain.Model{ID: 1}}, nil, nil, nil, chRepo)
+
+		count, err := svc.CreateBatch(context.Background(), []domain.Instance{
+			{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-ok", Attributes: map[string]interface{}{"note": "v1", "cpu": 2}},
+			{TenantID: 3, ModelUID: "huawei_ecs", AssetID: "i-dup", Attributes: map[string]interface{}{"note": "v2"}},
+		})
+		if err == nil {
+			t.Fatal("部分失败仍应上抛错误")
+		}
+		if count != 1 {
+			t.Fatalf("已写入条数应为 1，实际 %d", count)
+		}
+		if len(chRepo.records) != 2 {
+			t.Fatalf("应只为已落库的第 1 条写 2 条字段审计，实际 %d 条: %+v", len(chRepo.records), chRepo.records)
+		}
+		for _, r := range chRepo.records {
+			if r.AssetID != "i-ok" {
+				t.Fatalf("审计不应覆盖未落库的条目: %+v", r)
 			}
 		}
 	})

@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"time"
 
@@ -195,26 +196,74 @@ func (d *instanceDAO) CreateBatch(ctx context.Context, instances []Instance) (in
 	}
 
 	now := time.Now().UnixMilli()
-	docs := make([]interface{}, len(instances))
+	inserted := int64(0)
 
-	for i := range instances {
-		if instances[i].ID == 0 {
-			instances[i].ID = d.db.GetIdGenerator(InstanceCollection)
+	// 显式分块插入：驱动的 retryable writes 会把超大批量切成多个子批次下发，此时
+	// BulkWriteException.WriteErrors[].Index 只相对**失败的子批次**，用它推断「已写入
+	// 多少条」会严重低估。每块远小于驱动的切分阈值，块内下标就能直接当已写入条数用。
+	for start := 0; start < len(instances); start += batchInsertChunkSize {
+		end := start + batchInsertChunkSize
+		if end > len(instances) {
+			end = len(instances)
 		}
-		instances[i].Ctime = now
-		instances[i].Utime = now
-		docs[i] = instances[i]
+		docs := make([]interface{}, 0, end-start)
+		for i := start; i < end; i++ {
+			if instances[i].ID == 0 {
+				instances[i].ID = d.db.GetIdGenerator(InstanceCollection)
+			}
+			instances[i].Ctime = now
+			instances[i].Utime = now
+			docs = append(docs, instances[i])
+		}
+
+		result, err := d.db.Collection(InstanceCollection).InsertMany(ctx, docs)
+		if err != nil {
+			n, ok := insertedInFailedInsert(err, len(docs))
+			if ok {
+				inserted += n
+			}
+			return inserted, err
+		}
+		inserted += int64(len(result.InsertedIDs))
 	}
 
-	result, err := d.db.Collection(InstanceCollection).InsertMany(ctx, docs)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(len(result.InsertedIDs)), nil
+	return inserted, nil
 }
 
-// Update 更新实例
+// batchInsertChunkSize 是单次 InsertMany 的文档数上限。
+//
+// 取值远低于驱动切分阈值（10 万条 / 约 48MB），保证「块内写错误下标」就等于「本块
+// 已写入条数」，不依赖驱动是否把请求拆成多个子批次。
+const batchInsertChunkSize = 200
+
+// insertedInFailedInsert 从有序 InsertMany 的错误里推断**本次调用已写入条数**。
+//
+// 三种情况：
+//   - 写错误（WriteErrors 非空）：有序插入下失败点之前都已写入，下标即条数；
+//   - 仅写关注错误（WriteConcernError，如 wtimeout）：文档已全部应用到主节点，只是
+//     确认不足，按整块已写入处理；
+//   - 其它错误（网络中断、非批量错误）：无法判断，返回 ok=false，调用方自行决定。
+//
+// 返回 ok=false 表示「无法确定」，此时调用方不应补审计（宁缺勿错）。
+func insertedInFailedInsert(err error, chunkLen int) (int64, bool) {
+	var bulkErr mongo.BulkWriteException
+	if !errors.As(err, &bulkErr) {
+		return 0, false
+	}
+	if len(bulkErr.WriteErrors) > 0 {
+		idx := bulkErr.WriteErrors[0].Index
+		// 下标 0 基，合法失败点在 [0, chunkLen-1]；等于 chunkLen 属异常值，按无法确定处理。
+		if idx < 0 || idx >= chunkLen {
+			return 0, false
+		}
+		return int64(idx), true
+	}
+	if bulkErr.WriteConcernError != nil {
+		return int64(chunkLen), true
+	}
+	return 0, false
+}
+
 func (d *instanceDAO) Update(ctx context.Context, tenantID int64, instance Instance) error {
 	now := time.Now().UnixMilli()
 
