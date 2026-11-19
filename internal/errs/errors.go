@@ -21,6 +21,9 @@ var (
 	ModelExists       = ErrorCode{Code: 409001, Msg: "model already exists"}
 	ModelInvalid      = ErrorCode{Code: 400002, Msg: "model invalid"}
 	ModelHasInstances = ErrorCode{Code: 400009, Msg: "model has instances, cannot delete"}
+	// RelationTypeInUse：模型关系类型仍被资产关系引用。
+	// 与 ModelHasInstances 同族（400 段），前端按 code 判 4xx 即可提示。
+	RelationTypeInUse = ErrorCode{Code: 400010, Msg: "relation type is in use by instance relations, cannot delete"}
 )
 
 // 实例相关错误码
@@ -67,6 +70,8 @@ var (
 	ErrModelNotFound        = errors.New("model not found")
 	ErrModelExists          = errors.New("model already exists")
 	ErrModelHasInstances    = errors.New("model has instances, cannot delete")
+	// ErrRelationTypeInUse 由 service.RelationTypeInUseError 通过 Is 方法匹配。
+	ErrRelationTypeInUse = errors.New("relation type is in use by instance relations")
 
 	ErrInvalidAssetID    = errors.New("asset id cannot be empty")
 	ErrInvalidTenantID   = errors.New("tenant id cannot be empty")
