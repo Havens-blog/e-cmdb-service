@@ -2,7 +2,6 @@ package web
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
@@ -11,24 +10,6 @@ import (
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/service"
 )
-
-// parseOptionalBool 解析可选的布尔查询参数，用于区分「未传」与「传 false」：
-//   - 未传 / 空串  -> nil（不加过滤条件）
-//   - "true"/"1"   -> true
-//   - "false"/"0"  -> false
-//   - 其它非法值   -> nil（宽容处理，不因拼写错误改变结果集）
-func parseOptionalBool(raw string) *bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "true", "1":
-		v := true
-		return &v
-	case "false", "0":
-		v := false
-		return &v
-	default:
-		return nil
-	}
-}
 
 // AttributeHandler 属性HTTP处理器
 type AttributeHandler struct {
@@ -263,6 +244,8 @@ func (h *AttributeHandler) ListAttributes(ctx *gin.Context) {
 		Limit:     limit,
 	}
 
+	var boolErr string
+
 	if groupIDStr != "" {
 		groupID, groupErr := parseNonNegativeInt64(groupIDStr, "group_id")
 		if groupErr != "" {
@@ -276,9 +259,23 @@ func (h *AttributeHandler) ListAttributes(ctx *gin.Context) {
 	// 此前未解析，而 DAO 的 buildQuery 已支持（filter.Required != nil 等分支），
 	// 导致传任意值都返回全部属性（实测 host 模型 required=true/false 均返回 6 条，
 	// 而实际分布是 true=3 / false=3）。
-	filter.Required = parseOptionalBool(ctx.Query("required"))
-	filter.Display = parseOptionalBool(ctx.Query("display"))
-	filter.Searchable = parseOptionalBool(ctx.Query("searchable"))
+	// 取值非法必须报错：旧实现把无法识别的值当作「未传」，于是 required=zzz
+	// 静默退化成「不按 required 过滤」（实测返回全部 17 条属性）。
+	filter.Required, boolErr = parseOptionalBoolParam(ctx.Query("required"), "required")
+	if boolErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, boolErr))
+		return
+	}
+	filter.Display, boolErr = parseOptionalBoolParam(ctx.Query("display"), "display")
+	if boolErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, boolErr))
+		return
+	}
+	filter.Searchable, boolErr = parseOptionalBoolParam(ctx.Query("searchable"), "searchable")
+	if boolErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, boolErr))
+		return
+	}
 
 	attrs, total, err := h.svc.ListAttributes(ctx.Request.Context(), filter)
 	if err != nil {

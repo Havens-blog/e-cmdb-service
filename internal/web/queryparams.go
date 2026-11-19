@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
+	"github.com/Havens-blog/e-cmdb-service/internal/service"
 )
 
 // 未知查询参数守卫（2026-11-19 统一收口）。
@@ -149,4 +150,99 @@ var (
 
 	// GET /cmdb/topology/related/:id
 	relatedInstancesParamSet = newParamSet("relation_type_uid")
+)
+
+// ---------------------------------------------------------------------------
+// 参数取值校验（2026-11-19 第二轮：上一节处理「参数名不认识」，这里处理
+// 「参数名认识、但取值非法」）
+//
+// 上节白名单解决了拼错的参数名被静默忽略。同类陷阱还有另一半：参数名在白名单
+// 里，但取值非法时解析器退化成「未传」，过滤条件就此消失。实测（2026-11-19）：
+//
+//	GET /cmdb/models/ecs/attributes?required=zzz    → 200，total=17（= 全部）
+//	GET /cmdb/models/ecs/attributes?display=zzz     → 200，total=17（= 全部）
+//	GET /cmdb/models/ecs/attributes?searchable=zzz  → 200，total=17（= 全部）
+//	GET /cmdb/models?extensible=zzz                 → 200，total=81（= 全部）
+//	GET /cmdb/quality/issues?type=zzz               → 200，total=0（看起来「健康」）
+//	GET /cmdb/quality/field-issues?issue_type=zzz   → 200，total=0
+//
+// 而同一批处理器的整型参数早已严格报错：
+//
+//	?level=zzz              → 400 level 必须是不小于 0 的整数（收到 "zzz"）
+//	?source_instance_id=zzz → 400 source_instance_id 必须是大于 0 的整数（收到 "zzz"）
+//
+// 也就是说同一套 API 对「值非法」的处理并不一致：整型严格，布尔与枚举宽松。
+// 宽松的两种后果都会骗调用方 —— 布尔退化成全量（放大副作用），枚举退化成空集
+// （把「参数写错了」显示成「没有问题」）。数据质量面板尤其不能这样。
+//
+// 约定：空字符串（`?required=`）仍表示「未传」，保持与前端「清空筛选」一致；
+// 只有非空且无法识别的值才报错。
+
+// boolParamHint 是布尔参数的合法取值说明，报错与文档共用同一份措辞。
+const boolParamHint = "true/false/1/0"
+
+// parseOptionalBoolParam 解析可选的布尔查询参数。
+//
+// 返回 (nil, "") 表示未传；值非法时返回空指针与可直接回给调用方的中文原因。
+// 与旧的 parseOptionalBool 的差别：旧实现把任意无法识别的值当成「未传」，
+// 于是 `required=zzz` 静默变成「不按 required 过滤」并返回全部属性。
+func parseOptionalBoolParam(raw, name string) (*bool, string) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, ""
+	}
+	switch strings.ToLower(value) {
+	case "true", "1":
+		on := true
+		return &on, ""
+	case "false", "0":
+		off := false
+		return &off, ""
+	default:
+		return nil, fmt.Sprintf("%s 必须是布尔值（%s，收到 %q）", name, boolParamHint, raw)
+	}
+}
+
+// validateEnumParam 校验枚举型查询参数的取值。
+//
+// 空字符串表示「未传」，返回空串；命中 allowed 之一返回空串；
+// 其余返回中文原因并列出合法取值。
+//
+// 为什么必须报错而不是返回空集：`/quality/issues?type=zzz` 现在返回
+// `{"total":0}`，与「这个租户确实没有该类问题」完全无法区分。
+func validateEnumParam(raw, name string, allowed []string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	for _, ok := range allowed {
+		if value == ok {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s 必须是以下值之一：%s（收到 %q）", name, strings.Join(allowed, "、"), raw)
+}
+
+// 枚举参数取值集合。
+//
+// qualityIssueTypes 只包含 /quality/issues 真正能返回的三类判定级问题：
+// orphan_instance / missing_field 走 Mongo 下推，dangling_relation 走分析缓存。
+// 字段级问题（field_type / field_enum）由 /quality/field-issues 提供，因此
+// 传到这里会被拒绝并提示改用另一个端点 —— 允许它通过只会得到空集。
+var (
+	qualityIssueTypes = []string{
+		service.QualityIssueTypeOrphan,
+		service.QualityIssueTypeMissingField,
+		service.QualityIssueTypeDanglingRelation,
+	}
+
+	qualityFieldIssueTypes = []string{
+		service.QualityIssueTypeFieldType,
+		service.QualityIssueTypeFieldEnum,
+	}
+
+	// syncIssueTypes 对应 domain.ValidateAttributes 产出的警告类型
+	// （internal/domain/instance_validation.go: required / enum / type），
+	// 也是 recordSyncQualityIssues 写入 IssueType 的取值。
+	syncIssueTypes = []string{"required", "enum", "type"}
 )

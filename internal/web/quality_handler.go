@@ -58,6 +58,11 @@ func (h *QualityHandler) Issues(ctx *gin.Context) (ginx.Result, error) {
 	}
 	tenantID := middleware.GetTenantID(ctx)
 	typ := ctx.Query("type")
+	// 取值非法必须报错：旧实现把未知 type 当成「没有该类问题」，
+	// `?type=zzz` 返回 {"total":0}，与「真的没有问题」无法区分。
+	if enumErr := validateEnumParam(typ, "type", qualityIssueTypes); enumErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, enumErr+"；字段级问题请改用 /api/v1/cmdb/quality/field-issues"), nil
+	}
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
 	if pagingErr != "" {
 		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
@@ -94,6 +99,9 @@ func (h *QualityHandler) FieldIssues(ctx *gin.Context) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
 	modelUID := ctx.Query("model_uid")
 	issueType := ctx.Query("issue_type")
+	if enumErr := validateEnumParam(issueType, "issue_type", qualityFieldIssueTypes); enumErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, enumErr), nil
+	}
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
 	if pagingErr != "" {
 		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
@@ -115,6 +123,9 @@ func (h *QualityHandler) SyncIssues(ctx *gin.Context) (ginx.Result, error) {
 	modelUID := ctx.Query("model_uid")
 	issueType := ctx.Query("issue_type")
 	assetID := ctx.Query("asset_id")
+	if enumErr := validateEnumParam(issueType, "issue_type", syncIssueTypes); enumErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, enumErr), nil
+	}
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
 	if pagingErr != "" {
 		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
