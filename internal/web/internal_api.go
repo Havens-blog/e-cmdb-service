@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
@@ -110,11 +111,31 @@ func (h *InternalAPIHandler) BatchGet(c *gin.Context) {
 }
 
 // ListUnbound 查未绑定实例。
+//
+// 参数校验走 parseIntQuery（缺省保持历史行为、显式非法值返回 400），
+// limit 经 clampInternalLimit 钳进 [1,500]：DAO 对 limit<=0 不加 $limit，
+// 曾出现 `limit=abc` 静默变成 0 → 一次返回 20166 条、耗时 9.2 秒。
 func (h *InternalAPIHandler) ListUnbound(c *gin.Context) {
-	tenantID := queryInt64(c, "tenant_id")
-	offset := queryInt64(c, "offset")
-	limit := queryInt64(c, "limit")
-	instances, err := h.repo.ListUnbound(c.Request.Context(), tenantID, offset, limit)
+	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	offset, offsetPresent, errMsg := parseIntQuery(c, "offset")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	if offsetPresent && offset < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "offset 必须是不小于 0 的整数"})
+		return
+	}
+	limit, limitPresent, errMsg := parseIntQuery(c, "limit")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	instances, err := h.repo.ListUnbound(c.Request.Context(), tenantID, offset, clampInternalLimit(limit, limitPresent))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -125,16 +146,22 @@ func (h *InternalAPIHandler) ListUnbound(c *gin.Context) {
 // ListInstances 按模型/名称/云厂商列实例，供 opsagent 资源拓扑查询（CDN 域名、
 // 云资源清单）。租户由调用方显式传参（S2S 无会话租户）；model_uid 为空时按
 // asset_name 模糊匹配。provider 可选，过滤 attributes.provider（如 volcano/aliyun）。
-// limit 缺省 100、上限 500。
+// limit 缺省 100、上限 500；显式非法值（如 tenant_id=abc）返回 400，不静默兜底。
 func (h *InternalAPIHandler) ListInstances(c *gin.Context) {
 	modelUID := c.Query("model_uid")
 	assetName := c.Query("asset_name")
 	provider := c.Query("provider")
-	tenantID := queryInt64(c, "tenant_id")
-	limit := queryInt64(c, "limit")
-	if limit <= 0 || limit > 500 {
-		limit = 100
+	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
 	}
+	limit, limitPresent, errMsg := parseIntQuery(c, "limit")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	limit = clampInternalLimit(limit, limitPresent)
 	filter := domain.InstanceFilter{
 		ModelUID:  modelUID,
 		AssetName: assetName,
@@ -159,7 +186,11 @@ func (h *InternalAPIHandler) ListInstances(c *gin.Context) {
 
 // CountUnbound 统计未绑定实例数。
 func (h *InternalAPIHandler) CountUnbound(c *gin.Context) {
-	tenantID := queryInt64(c, "tenant_id")
+	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
 	count, err := h.repo.CountUnbound(c.Request.Context(), tenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -185,7 +216,11 @@ func (h *InternalAPIHandler) StatsByIDs(c *gin.Context) {
 
 // StatsAll 聚合统计全部实例。
 func (h *InternalAPIHandler) StatsAll(c *gin.Context) {
-	tenantID := queryInt64(c, "tenant_id")
+	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
 	result, err := h.repo.AggregateAllStats(c.Request.Context(), tenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -196,7 +231,11 @@ func (h *InternalAPIHandler) StatsAll(c *gin.Context) {
 
 // StatsUnbound 聚合统计未绑定实例。
 func (h *InternalAPIHandler) StatsUnbound(c *gin.Context) {
-	tenantID := queryInt64(c, "tenant_id")
+	tenantID, _, errMsg := parseIntQuery(c, "tenant_id")
+	if errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
 	result, err := h.repo.AggregateUnboundStats(c.Request.Context(), tenantID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -205,7 +244,49 @@ func (h *InternalAPIHandler) StatsUnbound(c *gin.Context) {
 	c.JSON(http.StatusOK, toStatsDTO(result))
 }
 
-func queryInt64(c *gin.Context, key string) int64 {
-	v, _ := strconv.ParseInt(c.Query(key), 10, 64)
-	return v
+// internalListDefaultLimit / internalListMaxLimit 是内部 S2S 列表端点的单次取数上限。
+//
+// 取值与 Web 侧 maxListLimit 对齐（500），因为调用方（e-cam servicetree 未绑定弹窗、
+// opsagent 资源拓扑）都按「一次最多 500 条」设计；超过上限一律钳到上限，
+// 而不是回落到默认值，避免「要 500 条只给 100 条」这种静默降级。
+const (
+	internalListDefaultLimit = 100
+	internalListMaxLimit     = 500
+)
+
+// parseIntQuery 解析可选的整数查询参数，返回 (value, present, errMsg)。
+//
+//   - present=false（参数缺省或空串）：调用方沿用历史默认值，保持 S2S 兼容；
+//   - errMsg != ""（参数显式传入但无法解析）：调用方必须返回 400，**不得**按 0 兜底。
+//
+// 为什么不能像旧实现那样 `v, _ := strconv.ParseInt(...)` 静默吞错：
+// 对 tenant_id 而言 0 表示「不加租户过滤」（见 instanceDAO.buildQuery 的
+// `if filter.TenantID != 0`），于是 tenant_id=abc 会退化成跨租户全量读取。
+// 2026-11-19 线上实测 `/internal/instances/list?tenant_id=abc&limit=5`
+// 返回 total=21498（租户 1 的 240 条 + 租户 3 的 21258 条），而 tenant_id=1/3
+// 分别只返回 240 / 21258 —— 一个拼错的参数就能把全部租户的数据读出去，属 fail-open。
+func parseIntQuery(c *gin.Context, key string) (value int64, present bool, errMsg string) {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return 0, false, ""
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, true, key + " 必须是整数（收到 " + strconv.Quote(raw) + "）"
+	}
+	return v, true, ""
+}
+
+// clampInternalLimit 把 limit 钳进 [1, internalListMaxLimit]：
+// 缺省、<=0 或非法（理论上已由 parseIntQuery 拦下）统一取默认值 100，
+// 超过上限钳到 500。DAO 对 limit<=0 的解释是「不加 $limit」，即导出全集合
+// （实测未绑定实例 20166 条、9.2 秒），所以这里绝不能把 0 透传下去。
+func clampInternalLimit(limit int64, present bool) int64 {
+	if !present || limit <= 0 {
+		return internalListDefaultLimit
+	}
+	if limit > internalListMaxLimit {
+		return internalListMaxLimit
+	}
+	return limit
 }
