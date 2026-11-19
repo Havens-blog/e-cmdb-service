@@ -122,6 +122,11 @@ func (h *ModelHandler) GetByUID(ctx *gin.Context) {
 
 // List 获取模型列表
 func (h *ModelHandler) List(ctx *gin.Context) {
+	// 白名单校验放在最前面：未知参数直接报错，而不是被静默忽略后返回全量。
+	// 实测（2026-11-19）：?keyword=zz-no-such-model 与 ?bogus=1 都返回全部 81 个模型。
+	if rejectUnsupportedQuery(ctx, modelListParamSet) {
+		return
+	}
 	provider := ctx.Query("provider")
 	category := ctx.Query("category")
 	parentUID := ctx.Query("parent_uid")

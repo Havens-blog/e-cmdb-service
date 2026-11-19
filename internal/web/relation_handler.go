@@ -181,6 +181,9 @@ func (h *RelationHandler) CreateModelRelation(ctx *gin.Context, req CreateModelR
 }
 
 func (h *RelationHandler) ListModelRelations(ctx *gin.Context) {
+	if rejectUnsupportedQuery(ctx, modelRelationListParamSet) {
+		return
+	}
 	sourceModelUID := ctx.Query("source_model_uid")
 	targetModelUID := ctx.Query("target_model_uid")
 	relationType := ctx.Query("relation_type")
@@ -374,6 +377,11 @@ func (h *RelationHandler) CreateBatchInstanceRelation(ctx *gin.Context, req Crea
 }
 
 func (h *RelationHandler) ListInstanceRelations(ctx *gin.Context) {
+	// 实测（2026-11-19）：?bogus=1 返回全部 1304 条实例关系。
+	// 本端点尤其危险 —— 关系删除按 id 逐个执行，误判筛选范围会放大副作用。
+	if rejectUnsupportedQuery(ctx, instanceRelationListParamSet) {
+		return
+	}
 	sourceIDStr := ctx.Query("source_instance_id")
 	targetIDStr := ctx.Query("target_instance_id")
 	relationTypeUID := ctx.Query("relation_type_uid")
@@ -455,6 +463,9 @@ func (h *RelationHandler) DeleteInstanceRelation(ctx *gin.Context) {
 // ==================== 拓扑处理方法 ====================
 
 func (h *RelationHandler) GetInstanceTopology(ctx *gin.Context) {
+	if rejectUnsupportedQuery(ctx, instanceTopologyParamSet) {
+		return
+	}
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -496,6 +507,9 @@ func (h *RelationHandler) GetInstanceTopology(ctx *gin.Context) {
 }
 
 func (h *RelationHandler) GetModelTopology(ctx *gin.Context) {
+	if rejectUnsupportedQuery(ctx, modelTopologyParamSet) {
+		return
+	}
 	provider := ctx.Query("provider")
 
 	graph, err := h.topologySvc.GetModelTopology(ctx.Request.Context(), provider)
@@ -508,6 +522,9 @@ func (h *RelationHandler) GetModelTopology(ctx *gin.Context) {
 }
 
 func (h *RelationHandler) GetRelatedInstances(ctx *gin.Context) {
+	if rejectUnsupportedQuery(ctx, relatedInstancesParamSet) {
+		return
+	}
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {

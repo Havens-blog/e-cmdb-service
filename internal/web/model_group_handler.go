@@ -92,6 +92,9 @@ func (h *ModelGroupHandler) Create(ctx *gin.Context, req CreateModelGroupReq) (g
 
 // List 获取模型分组列表
 func (h *ModelGroupHandler) List(ctx *gin.Context) {
+	if rejectUnsupportedQuery(ctx, modelGroupListParamSet) {
+		return
+	}
 	offset, limit, pagingErr := resolvePagingWithin(ctx.Query("offset"), ctx.Query("limit"), attributeListLimit, maxListLimit)
 	if pagingErr != "" {
 		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, pagingErr))

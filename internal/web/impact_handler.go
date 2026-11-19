@@ -36,6 +36,9 @@ func (h *ImpactHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 // GetImpact 影响分析。
 func (h *ImpactHandler) GetImpact(ctx *gin.Context) (ginx.Result, error) {
+	if res, bad := guardQueryParams(ctx, impactParamSet); bad {
+		return res, nil
+	}
 	tenantID := middleware.GetTenantID(ctx)
 
 	instanceIDStr := ctx.Query("instance_id")

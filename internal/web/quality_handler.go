@@ -53,6 +53,9 @@ func (h *QualityHandler) Overview(ctx *gin.Context) (ginx.Result, error) {
 
 // Issues 数据质量问题列表。
 func (h *QualityHandler) Issues(ctx *gin.Context) (ginx.Result, error) {
+	if res, bad := guardQueryParams(ctx, qualityIssuesParamSet); bad {
+		return res, nil
+	}
 	tenantID := middleware.GetTenantID(ctx)
 	typ := ctx.Query("type")
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
@@ -85,6 +88,9 @@ func (h *QualityHandler) Refresh(ctx *gin.Context) (ginx.Result, error) {
 // 支持 model_uid / issue_type 过滤（issue_type 取 field_type / field_enum），
 // 分页参数沿用统一校验（resolvePaging）。
 func (h *QualityHandler) FieldIssues(ctx *gin.Context) (ginx.Result, error) {
+	if res, bad := guardQueryParams(ctx, qualityFieldIssuesParamSet); bad {
+		return res, nil
+	}
 	tenantID := middleware.GetTenantID(ctx)
 	modelUID := ctx.Query("model_uid")
 	issueType := ctx.Query("issue_type")
@@ -102,6 +108,9 @@ func (h *QualityHandler) FieldIssues(ctx *gin.Context) (ginx.Result, error) {
 
 // SyncIssues 同步质量问题清单（记录但不阻断）。
 func (h *QualityHandler) SyncIssues(ctx *gin.Context) (ginx.Result, error) {
+	if res, bad := guardQueryParams(ctx, qualitySyncIssuesParamSet); bad {
+		return res, nil
+	}
 	tenantID := middleware.GetTenantID(ctx)
 	modelUID := ctx.Query("model_uid")
 	issueType := ctx.Query("issue_type")
