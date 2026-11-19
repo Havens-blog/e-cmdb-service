@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -16,6 +17,13 @@ const (
 	QualityIssueTypeOrphan           = "orphan_instance"
 	QualityIssueTypeMissingField     = "missing_field"
 	QualityIssueTypeDanglingRelation = "dangling_relation"
+
+	// 字段值不合规（类型/枚举）。方案 B 下这两类只警告不阻断写入，
+	// 因此需要独立的可见面：sync_quality_issue 集合只覆盖 e-cmdb 自身
+	// upsert 入口，而真实云同步由 e-cam 直接写库，实测该集合恒为 0
+	// （2026-11-19 实测 /quality/sync-issues total=0）。
+	QualityIssueTypeFieldType = "field_type"
+	QualityIssueTypeFieldEnum = "field_enum"
 )
 
 // QualityIssue 数据质量问题条目。
@@ -55,6 +63,8 @@ type qualityAnalysis struct {
 	danglingRelationCount int
 	healthScore           float64
 	issues                []QualityIssue
+	// fieldIssues 字段值不合规（类型/枚举）明细，由 collectFieldValueIssues 产出。
+	fieldIssues []QualityIssue
 
 	// countsOnly 表示该结果只包含计数字段、successfully 不含 issues 明细。
 	//
@@ -68,6 +78,10 @@ type qualityAnalysis struct {
 type QualityService interface {
 	Overview(ctx context.Context, tenantID int64) (QualityOverview, error)
 	Issues(ctx context.Context, tenantID int64, typ string, offset, limit int) (QualityIssuesResult, error)
+	// FieldIssues 返回「字段值不合规」（类型/枚举）实时清单，支持按模型与类型过滤。
+	FieldIssues(ctx context.Context, tenantID int64, modelUID, issueType string, offset, limit int) (QualityIssuesResult, error)
+	// Refresh 强制重算一次质量分析（跳过缓存），供用户修复数据后立即看到变化。
+	Refresh(ctx context.Context, tenantID int64) (QualityOverview, error)
 	// OrphanSources 按 model_uid 聚合孤儿实例来源（哪些模型缺失导致孤儿）
 	OrphanSources(ctx context.Context, tenantID int64) (OrphanSourceResult, error)
 	// SyncIssues 返回同步链路「记录但不阻断」写入的问题清单。
@@ -337,6 +351,154 @@ func (s *qualityService) Issues(ctx context.Context, tenantID int64, typ string,
 	return selectIssues(a.issues, typ, offset, limit), nil
 }
 
+// FieldIssues 返回「字段值不合规」（类型/枚举）实时清单。
+//
+// 为什么需要它：按产品已确认的方案 B（2026-11-02），枚举越界与类型不符只警告
+// 不阻断写入；而记录入口 sync_quality_issue 只被 Upsert/UpsertBatch 调用，
+// 真实云同步由 e-cam 直接写库不经过这里 —— 结果这类脏数据在系统里完全不可见。
+// 这里不改变写入语义，只把 domain.ValidateAttributes 的警告提升为可检索清单，
+// 数据来自与 Issues 相同的 60s 分析缓存。
+func (s *qualityService) FieldIssues(ctx context.Context, tenantID int64, modelUID, issueType string, offset, limit int) (QualityIssuesResult, error) {
+	a, err := s.loadAnalysis(ctx, tenantID)
+	if err != nil {
+		return QualityIssuesResult{}, err
+	}
+
+	if needsFullAnalysisForIssues(a) {
+		a, err = s.loadFresh(ctx, tenantID)
+		if err != nil {
+			return QualityIssuesResult{}, err
+		}
+	}
+
+	return selectFieldIssues(a.fieldIssues, modelUID, issueType, offset, limit), nil
+}
+
+// Refresh 强制重算一次质量分析并写回缓存。
+//
+// 背景（2026-11-19 实测）：分析结果采用 stale-while-revalidate 语义 ——
+// 缓存过期后的第一次请求仍返回旧值并在后台刷新，因此「改好数据」到
+// 「页面显示已修复」最长可能要两个 TTL（约 2 分钟）。用户点一次刷新却
+// 看到旧结论属于明显误导，故提供强制重算入口：同步算完再返回。
+func (s *qualityService) Refresh(ctx context.Context, tenantID int64) (QualityOverview, error) {
+	a, err := s.loadFresh(ctx, tenantID)
+	if err != nil {
+		return QualityOverview{}, err
+	}
+	return QualityOverview{
+		TotalInstances:        a.totalInstances,
+		OrphanCount:           a.orphanCount,
+		MissingFieldCount:     a.missingFieldCount,
+		DanglingRelationCount: a.danglingRelationCount,
+		HealthScore:           a.healthScore,
+	}, nil
+}
+
+// collectFieldValueIssues 扫描实例属性值，产出类型/枚举两类不合规问题。
+//
+// 语义与 domain.ValidateAttributes 完全一致（含枚举大小写不敏感、数值可解析即通过），
+// 因此不会出现「质量页说有、保存时又说没问题」的口径分歧。
+// 必填缺失由 missing_field 口径负责，这里显式跳过，避免重复计数。
+func collectFieldValueIssues(instances []domain.Instance, attributes []domain.Attribute) []QualityIssue {
+	defsByModel := make(map[string][]domain.Attribute)
+	displayName := make(map[string]string)
+	for _, attr := range attributes {
+		if attr.ModelUID == "" || attr.FieldUID == "" {
+			continue
+		}
+		defsByModel[attr.ModelUID] = append(defsByModel[attr.ModelUID], attr)
+		name := attr.DisplayName
+		if name == "" {
+			name = attr.FieldName
+		}
+		displayName[attr.ModelUID+"|"+attr.FieldUID] = name
+	}
+
+	issues := make([]QualityIssue, 0)
+	for _, inst := range instances {
+		defs := defsByModel[inst.ModelUID]
+		if len(defs) == 0 {
+			// 模型无字段定义（如仅同步写入的别名模型）时无从判断，跳过。
+			continue
+		}
+		res := domain.ValidateAttributes(inst.Attributes, defs, false)
+		for _, w := range res.Warnings {
+			typ := ""
+			switch w.Type {
+			case "type":
+				typ = QualityIssueTypeFieldType
+			case "enum":
+				typ = QualityIssueTypeFieldEnum
+			default:
+				continue
+			}
+			issues = append(issues, QualityIssue{
+				Type:        typ,
+				Description: w.Message,
+				InstanceID:  inst.ID,
+				AssetID:     inst.AssetID,
+				AssetName:   inst.AssetName,
+				ModelUID:    inst.ModelUID,
+				FieldUID:    w.Field,
+				FieldName:   displayName[inst.ModelUID+"|"+w.Field],
+			})
+		}
+	}
+
+	// 稳定排序：模型 → 字段 → 实例，便于翻页时结果不抖动。
+	sort.SliceStable(issues, func(i, j int) bool {
+		if issues[i].ModelUID != issues[j].ModelUID {
+			return issues[i].ModelUID < issues[j].ModelUID
+		}
+		if issues[i].FieldUID != issues[j].FieldUID {
+			return issues[i].FieldUID < issues[j].FieldUID
+		}
+		return issues[i].InstanceID < issues[j].InstanceID
+	})
+
+	return issues
+}
+
+// selectFieldIssues 按模型与问题类型过滤后分页（纯函数，便于单测）。
+func selectFieldIssues(issues []QualityIssue, modelUID, issueType string, offset, limit int) QualityIssuesResult {
+	filtered := make([]QualityIssue, 0, len(issues))
+	for _, issue := range issues {
+		if modelUID != "" && issue.ModelUID != modelUID {
+			continue
+		}
+		if issueType != "" && issue.Type != issueType {
+			continue
+		}
+		filtered = append(filtered, issue)
+	}
+	return paginateIssues(filtered, offset, limit)
+}
+
+// paginateIssues 对已过滤的问题列表分页（纯函数）。
+func paginateIssues(filtered []QualityIssue, offset, limit int) QualityIssuesResult {
+	total := len(filtered)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	start := offset
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+
+	return QualityIssuesResult{
+		Items: filtered[start:end],
+		Total: total,
+	}
+}
+
 // SyncIssues 返回同步链路「记录但不阻断」写入的问题清单。
 //
 // 与 Issues（全量扫描实时计算）不同，这里直接读同步时落库的
@@ -529,6 +691,7 @@ func analyzeQuality(models []domain.Model, attributes []domain.Attribute, instan
 		danglingRelationCount: dangling,
 		healthScore:           computeHealthScore(len(instances), orphan+missing+dangling),
 		issues:                issues,
+		fieldIssues:           collectFieldValueIssues(instances, attributes),
 	}
 }
 
@@ -581,27 +744,7 @@ func selectIssues(issues []QualityIssue, typ string, offset, limit int) QualityI
 		}
 	}
 
-	total := len(filtered)
-	if offset < 0 {
-		offset = 0
-	}
-	if limit <= 0 {
-		limit = 20
-	}
-
-	start := offset
-	if start > total {
-		start = total
-	}
-	end := start + limit
-	if end > total {
-		end = total
-	}
-
-	return QualityIssuesResult{
-		Items: filtered[start:end],
-		Total: total,
-	}
+	return paginateIssues(filtered, offset, limit)
 }
 
 // refreshAsync 后台刷新指定租户的分析结果（单飞，避免并发重复计算）。
