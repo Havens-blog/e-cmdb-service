@@ -203,24 +203,31 @@ func parseOptionalBoolParam(raw, name string) (*bool, string) {
 	}
 }
 
-// validateEnumParam 校验枚举型查询参数的取值。
+// validateEnumParam 校验枚举型查询参数的取值，并返回**归一化后**的值。
 //
-// 空字符串表示「未传」，返回空串；命中 allowed 之一返回空串；
-// 其余返回中文原因并列出合法取值。
+// 返回 (归一化值, "") 表示放行：空字符串（含纯空格）表示「未传」，归一化为 ""；
+// 命中 allowed 之一时返回去掉首尾空格的规范取值。
+// 返回 ("", 中文原因) 表示拒绝，原因里列出合法取值。
 //
-// 为什么必须报错而不是返回空集：`/quality/issues?type=zzz` 现在返回
+// 两个返回值缺一不可。下游（selectIssues / selectFieldIssues / SyncIssueFilter）
+// 按字符串精确比较，若这里只做校验、调用方仍把原始值透传，那么
+// `?type=%20orphan_instance` 会因为校验时被 Trim 而通过、下游却匹配不到任何类型，
+// 退化成 {"total":0} —— 正是本函数要消灭的「静默空集」。所以调用方必须使用
+// 这里返回的归一化值，不能再用 ctx.Query 的原始串。
+//
+// 为什么必须报错而不是返回空集：`/quality/issues?type=zzz` 曾是
 // `{"total":0}`，与「这个租户确实没有该类问题」完全无法区分。
-func validateEnumParam(raw, name string, allowed []string) string {
+func validateEnumParam(raw, name string, allowed []string) (string, string) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return ""
+		return "", ""
 	}
 	for _, ok := range allowed {
 		if value == ok {
-			return ""
+			return value, ""
 		}
 	}
-	return fmt.Sprintf("%s 必须是以下值之一：%s（收到 %q）", name, strings.Join(allowed, "、"), raw)
+	return "", fmt.Sprintf("%s 必须是以下值之一：%s（收到 %q）", name, strings.Join(allowed, "、"), raw)
 }
 
 // 枚举参数取值集合。

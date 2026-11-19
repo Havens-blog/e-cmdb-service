@@ -70,25 +70,49 @@ func TestParseOptionalBoolParam(t *testing.T) {
 	}
 }
 
-// TestValidateEnumParam 锁定枚举参数校验：未传放行、命中放行、其余报错并列出合法值。
+// TestValidateEnumParam 锁定枚举参数校验：未传放行、命中放行并返回归一化值、其余报错并列出合法值。
+//
+// 返回值本身就是防回归点：调用方必须使用归一化值，否则 '?type=%20orphan_instance'
+// 会通过校验却在下游精确比较时匹配不到任何类型（静默空集）。
 func TestValidateEnumParam(t *testing.T) {
 	allowed := []string{"orphan_instance", "missing_field", "dangling_relation"}
 
-	if msg := validateEnumParam("", "type", allowed); msg != "" {
-		t.Fatalf("空值应视为未传，实际报错 %q", msg)
-	}
-	if msg := validateEnumParam("   ", "type", allowed); msg != "" {
-		t.Fatalf("纯空格应视为未传，实际报错 %q", msg)
-	}
-	for _, ok := range allowed {
-		if msg := validateEnumParam(ok, "type", allowed); msg != "" {
-			t.Fatalf("合法值 %q 被拒绝：%q", ok, msg)
+	for _, unset := range []string{"", "   ", "\t"} {
+		got, msg := validateEnumParam(unset, "type", allowed)
+		if msg != "" {
+			t.Fatalf("raw=%q 应视为未传，实际报错 %q", unset, msg)
+		}
+		if got != "" {
+			t.Fatalf("raw=%q 归一化后应为空串，实际 %q", unset, got)
 		}
 	}
 
-	msg := validateEnumParam("zzz", "type", allowed)
+	for _, ok := range allowed {
+		got, msg := validateEnumParam(ok, "type", allowed)
+		if msg != "" {
+			t.Fatalf("合法值 %q 被拒绝：%q", ok, msg)
+		}
+		if got != ok {
+			t.Fatalf("合法值 %q 归一化后应原样返回，实际 %q", ok, got)
+		}
+	}
+
+	t.Run("首尾空格被归一化而不是透传", func(t *testing.T) {
+		got, msg := validateEnumParam("  orphan_instance  ", "type", allowed)
+		if msg != "" {
+			t.Fatalf("带空格但仍合法，不应报错，实际 %q", msg)
+		}
+		if got != "orphan_instance" {
+			t.Fatalf("归一化后应为 orphan_instance，实际 %q", got)
+		}
+	})
+
+	got, msg := validateEnumParam("zzz", "type", allowed)
 	if msg == "" {
 		t.Fatal("未知枚举值应报错")
+	}
+	if got != "" {
+		t.Fatalf("报错时归一化值应为空串，实际 %q", got)
 	}
 	for _, want := range append([]string{"type", "zzz"}, allowed...) {
 		if !strings.Contains(msg, want) {
