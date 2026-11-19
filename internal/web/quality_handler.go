@@ -33,6 +33,10 @@ func (h *QualityHandler) RegisterRoutes(r *gin.RouterGroup) {
 		g.GET("/orphan-sources", ginx.Wrap(h.OrphanSources))
 		// 同步链路「记录但不阻断」写入的问题清单
 		g.GET("/sync-issues", ginx.Wrap(h.SyncIssues))
+		// 字段值不合规（类型/枚举）实时清单：方案 B 只警告不阻断，靠这里可见
+		g.GET("/field-issues", ginx.Wrap(h.FieldIssues))
+		// 强制重算质量分析（跳过 60s 缓存），供用户修复数据后立即核对
+		g.POST("/refresh", ginx.Wrap(h.Refresh))
 	}
 }
 
@@ -57,6 +61,39 @@ func (h *QualityHandler) Issues(ctx *gin.Context) (ginx.Result, error) {
 	}
 
 	data, err := h.svc.Issues(ctx.Request.Context(), tenantID, typ, offset, limit)
+	if err != nil {
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
+	}
+	return Result(data), nil
+}
+
+// Refresh 强制重算质量分析并返回最新概览。
+//
+// POST 语义：该操作会让缓存失效并触发一次全量扫描（实测约 5 秒），
+// 不做幂等/GTE 优化 —— 用户显式要求「现在重新算一次」。
+func (h *QualityHandler) Refresh(ctx *gin.Context) (ginx.Result, error) {
+	tenantID := middleware.GetTenantID(ctx)
+	data, err := h.svc.Refresh(ctx.Request.Context(), tenantID)
+	if err != nil {
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
+	}
+	return Result(data), nil
+}
+
+// FieldIssues 字段值不合规（类型/枚举）实时清单。
+//
+// 支持 model_uid / issue_type 过滤（issue_type 取 field_type / field_enum），
+// 分页参数沿用统一校验（resolvePaging）。
+func (h *QualityHandler) FieldIssues(ctx *gin.Context) (ginx.Result, error) {
+	tenantID := middleware.GetTenantID(ctx)
+	modelUID := ctx.Query("model_uid")
+	issueType := ctx.Query("issue_type")
+	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
+	if pagingErr != "" {
+		return ErrorResultWithMsg(errs.ParamsError, pagingErr), nil
+	}
+
+	data, err := h.svc.FieldIssues(ctx.Request.Context(), tenantID, modelUID, issueType, offset, limit)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), err
 	}
