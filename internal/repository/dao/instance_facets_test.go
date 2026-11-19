@@ -12,7 +12,7 @@ import (
 // 而库里 provider=volcano 有 7,813 条 → 选中「火山引擎」筛出 0 条；「区域」下拉
 // 由当前页 20 条提取，翻页后选项随之变化。改为服务端 $facet 聚合后，这里锁定：
 //   - 必须按租户过滤（筛选可选值也不能跨租户）
-//   - provider/region/source 三个维度都要分桶，缺失值经 $ifNull 归一为空串
+//   - provider/region/source/status 四个维度都要分桶，缺失值经 $ifNull 归一为空串
 //   - 每个维度要有上限，避免属性爆炸时把响应撑大
 func TestBuildFacetPipeline(t *testing.T) {
 	pipeline := buildFacetPipeline(3, 100)
@@ -48,7 +48,7 @@ func TestBuildFacetPipeline(t *testing.T) {
 			branches[item.Key] = arr
 		}
 	}
-	for _, key := range []string{"providers", "regions", "sources", "total"} {
+	for _, key := range []string{"providers", "regions", "sources", "statuses", "total"} {
 		if _, ok := branches[key]; !ok {
 			t.Fatalf("$facet 缺少维度 %q", key)
 		}
@@ -58,6 +58,9 @@ func TestBuildFacetPipeline(t *testing.T) {
 		"providers": "attributes.provider",
 		"regions":   "attributes.region",
 		"sources":   "source",
+		// iter246：状态筛选。状态值是小写且按模型不同（running/in_use/in-use/attached…），
+		// 只能由服务端聚合给出，硬编码大写会筛出 0 条。
+		"statuses": "attributes.status",
 	}
 	for branch, field := range cases {
 		stages := branchStages(t, branch, branches[branch])
