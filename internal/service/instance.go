@@ -203,30 +203,61 @@ func (s *instanceService) recordSyncQualityIssues(ctx context.Context, tenantID 
 	}
 }
 
-func (s *instanceService) Create(ctx context.Context, instance domain.Instance) (int64, error) {
+// BatchItemError 表示批量操作中第 Index 条（0 基）失败。
+//
+// 批量入口此前只返回一个笼统错误（甚至把 Mongo 的 E11000 原文透传给调用方），
+// 调用方无法定位是哪一条、哪个资产。批量能力必须能逐条定位，否则「部分失败」
+// 无法重试——这直接对应「批量处理采用全量回滚还是逐条结果」的语义要求。
+type BatchItemError struct {
+	Index    int    // 0 基下标
+	ModelUID string // 失败条目的模型（便于定位）
+	AssetID  string // 失败条目的资产 ID
+	Err      error  // 根因（可用 errors.Is / errors.As 判断）
+}
+
+func (e *BatchItemError) Error() string {
+	return fmt.Sprintf("第 %d 条（model_uid=%s, asset_id=%s）：%v", e.Index+1, e.ModelUID, e.AssetID, e.Err)
+}
+
+func (e *BatchItemError) Unwrap() error { return e.Err }
+
+// validateCreateOne 是单条创建与批量创建共用的校验序列。
+//
+// 顺序与历史行为保持一致：字段完整性 → 模型存在 → 必填字段 → 重复检查。
+// 单条与批量必须走同一套，否则 /instances/batch 会绕开必填校验
+// （实测 2026-11-19：ecs 缺 6 个必填字段的条目经批量入口返回 code=0 并落库）。
+func (s *instanceService) validateCreateOne(ctx context.Context, instance domain.Instance) error {
 	if err := instance.Validate(); err != nil {
-		return 0, err
+		return err
 	}
 
 	model, err := s.modelRepo.GetByUID(ctx, instance.ModelUID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to check model existence: %w", err)
+		return fmt.Errorf("failed to check model existence: %w", err)
 	}
 	if model.ID == 0 {
-		return 0, errs.ErrModelNotFound
+		return errs.ErrModelNotFound
 	}
 
 	// 新建：按模型字段定义校验，必填缺失直接拒绝
 	if err := s.validateModelAttributes(ctx, instance, true); err != nil {
-		return 0, err
+		return err
 	}
 
 	existing, err := s.repo.GetByAssetID(ctx, instance.TenantID, instance.ModelUID, instance.AssetID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to check existing instance: %w", err)
+		return fmt.Errorf("failed to check existing instance: %w", err)
 	}
 	if existing.ID > 0 {
-		return 0, errs.ErrInstanceExists
+		return errs.ErrInstanceExists
+	}
+
+	return nil
+}
+
+func (s *instanceService) Create(ctx context.Context, instance domain.Instance) (int64, error) {
+	if err := s.validateCreateOne(ctx, instance); err != nil {
+		return 0, err
 	}
 
 	id, err := s.repo.Create(ctx, instance)
@@ -244,10 +275,25 @@ func (s *instanceService) CreateBatch(ctx context.Context, instances []domain.In
 		return 0, nil
 	}
 
-	for _, inst := range instances {
-		if err := inst.Validate(); err != nil {
-			return 0, err
+	// 批量与单条共用同一套校验（模型存在性、必填字段、重复检查）。
+	// 历史实现只做 inst.Validate()，缺必填字段的条目可以经批量入口直接落库。
+	// 批内重复（同一 model_uid + asset_id 出现两次）同样要拦：唯一索引会以
+	// E11000 拒绝整批，而调用方拿不到「是第几条冲突」。
+	seen := make(map[string]struct{}, len(instances))
+	for i, inst := range instances {
+		if err := s.validateCreateOne(ctx, inst); err != nil {
+			return 0, &BatchItemError{Index: i, ModelUID: inst.ModelUID, AssetID: inst.AssetID, Err: err}
 		}
+		key := fmt.Sprintf("%d|%s|%s", inst.TenantID, inst.ModelUID, inst.AssetID)
+		if _, dup := seen[key]; dup {
+			return 0, &BatchItemError{
+				Index:    i,
+				ModelUID: inst.ModelUID,
+				AssetID:  inst.AssetID,
+				Err:      fmt.Errorf("%w: 同一批次内重复出现", errs.ErrInstanceExists),
+			}
+		}
+		seen[key] = struct{}{}
 	}
 
 	return s.repo.CreateBatch(ctx, instances)
