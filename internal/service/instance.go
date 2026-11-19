@@ -563,7 +563,14 @@ func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) 
 	// 方案 B（记录但不阻断）：单条 upsert 与批量一致，先 warn-only 校验并记录问题清单。
 	// 之前单条 Upsert 漏接，导致走单条导入/同步的实例绕过了字段问题记录。
 	s.recordSyncQualityIssues(ctx, instance.TenantID, []domain.Instance{instance})
-	return s.repo.Upsert(ctx, instance)
+
+	// 写库前先取旧值：upsert 是「有则更新、无则新增」，变更审计需要旧属性才能算出 diff。
+	existing, hadExisting := s.snapshotBeforeUpsert(ctx, instance)
+	if err := s.repo.Upsert(ctx, instance); err != nil {
+		return err
+	}
+	s.recordUpsertChanges(ctx, instance, existing, hadExisting)
+	return nil
 }
 
 func (s *instanceService) UpsertBatch(ctx context.Context, instances []domain.Instance) error {
@@ -577,6 +584,7 @@ func (s *instanceService) UpsertBatch(ctx context.Context, instances []domain.In
 		if err := inst.Validate(); err != nil {
 			return err
 		}
+		existing, hadExisting := s.snapshotBeforeUpsert(ctx, inst)
 		if err := s.repo.Upsert(ctx, inst); err != nil {
 			s.logger.Error("failed to upsert instance",
 				elog.String("asset_id", inst.AssetID),
@@ -585,6 +593,39 @@ func (s *instanceService) UpsertBatch(ctx context.Context, instances []domain.In
 			)
 			return err
 		}
+		s.recordUpsertChanges(ctx, inst, existing, hadExisting)
 	}
 	return nil
+}
+
+// snapshotBeforeUpsert 读取 upsert 之前的实例快照，供变更审计算 diff。
+//
+// 仅在注入审计仓储时才查询（省一次读）；查询失败视为「库里没有」，
+// 既不影响写入，也不阻断审计之外的任何流程。
+func (s *instanceService) snapshotBeforeUpsert(ctx context.Context, instance domain.Instance) (domain.Instance, bool) {
+	if s.changeHistoryRepo == nil {
+		return domain.Instance{}, false
+	}
+	old, err := s.repo.GetByAssetID(ctx, instance.TenantID, instance.ModelUID, instance.AssetID)
+	if err != nil || old.AssetID == "" {
+		return domain.Instance{}, false
+	}
+	return old, true
+}
+
+// recordUpsertChanges 为导入（upsert）路径补写变更审计。
+//
+// 背景（2026-11-19）：Create / Update / Delete 都会写 ecam_change_history，
+// 唯独 Upsert / UpsertBatch 不写。而 e-cmdb 的 upsert 唯一调用方是「导入实例」，
+// 于是通过导入写进来的资产在「变更审计」里完全不可见（实测 changes total=0），
+// 前端审计面板却早已把 import 映射成「导入」标签 —— 说明这是漏接，不是设计。
+// 非阻断：审计写入失败只记日志（recordChanges 内部处理）。
+func (s *instanceService) recordUpsertChanges(ctx context.Context, inst, existing domain.Instance, hadExisting bool) {
+	meta := changeMetaFromInstance(inst, domain.ChangeSourceImport)
+	if !hadExisting {
+		// 新增：与 Create 口径一致，全部字段记为新值。
+		s.recordChanges(ctx, meta, nil, inst.Attributes)
+		return
+	}
+	s.recordChanges(ctx, meta, existing.Attributes, inst.Attributes)
 }

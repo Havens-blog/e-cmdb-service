@@ -46,10 +46,16 @@ type ChangeMetadata struct {
 	ChangeTaskID string
 }
 
-// 变更来源取值：与 e-cam 的 sync_task 区分，标识手工/CMDB 操作。
+// 变更来源取值：与 e-cam 的 sync_task 区分，标识手工/导入等 CMDB 侧操作。
+//
+// ChangeSourceImport 对应「导入实例」（/instances/upsert(-batch)，唯一调用方是
+// 前端导入弹窗）。前端审计面板早已把 import 映射成「导入」标签，但后端此前
+// 从未写入该取值 —— 导入进来的资产在变更审计里完全不可见（2026-11-19 实测
+// changes total=0），属漏接而非设计。
 const (
 	ChangeSourceManual = "manual"
 	ChangeSourceSync   = "sync_task"
+	ChangeSourceImport = "import"
 )
 
 // ignoredChangeFields 与 e-cam 的 defaultIgnoreFields 对齐：这些字段高频变化

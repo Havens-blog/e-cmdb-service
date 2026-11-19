@@ -244,7 +244,7 @@ func (h *InstanceHandler) Upsert(ctx *gin.Context, req UpsertInstanceReq) (ginx.
 		Owner:      req.Owner,
 	}
 
-	err := h.svc.Upsert(ctx.Request.Context(), instance)
+	err := h.svc.Upsert(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instance)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -269,7 +269,7 @@ func (h *InstanceHandler) UpsertBatch(ctx *gin.Context, req UpsertBatchInstanceR
 		}
 	}
 
-	err := h.svc.UpsertBatch(ctx.Request.Context(), instances)
+	err := h.svc.UpsertBatch(middleware.WithOperator(ctx.Request.Context(), middleware.GetUsername(ctx)), instances)
 	if err != nil {
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
