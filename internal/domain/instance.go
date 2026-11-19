@@ -162,5 +162,9 @@ type InstanceFacets struct {
 	Providers []InstanceFacetBucket `json:"providers"`
 	Regions   []InstanceFacetBucket `json:"regions"`
 	Sources   []InstanceFacetBucket `json:"sources"`
-	Total     int64                 `json:"total"`
+	// Statuses 状态分布。状态值由各云厂商写入 attributes.status，实测为**小写且按模型不同**
+	// （running / available / in_use / in-use / active / attached / stopped …），
+	// 硬编码大写枚举会筛出 0 条，所以与 provider/region 一样由服务端聚合给出。
+	Statuses []InstanceFacetBucket `json:"statuses"`
+	Total    int64                 `json:"total"`
 }

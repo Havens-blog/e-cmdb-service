@@ -360,7 +360,14 @@ type InstanceFacets struct {
 	Providers []FacetBucket
 	Regions   []FacetBucket
 	Sources   []FacetBucket
-	Total     int64
+	// Statuses 状态分布（iter246）。
+	//
+	// 实测（2026-11-19，tenant 3）状态值是**小写且按模型不同**的：
+	// running 2,504 / available 4,166 / in_use 5,043 / in-use 348 / active 989 /
+	// attached 1,838 / stopped 39 / pending 13 / inactive 12 / creating 2 / deleting 1，
+	// 其余为空。硬编码大写枚举（Running/Stopped）会筛出 0 条，所以可选值只能由服务端聚合给出。
+	Statuses []FacetBucket
+	Total    int64
 }
 
 // facetMaxValues 每个维度最多返回的取值个数。
@@ -390,6 +397,7 @@ func buildFacetPipeline(tenantID int64, maxValues int) mongo.Pipeline {
 			{Key: "providers", Value: bucket("attributes.provider")},
 			{Key: "regions", Value: bucket("attributes.region")},
 			{Key: "sources", Value: bucket("source")},
+			{Key: "statuses", Value: bucket("attributes.status")},
 			{Key: "total", Value: bson.A{bson.D{{Key: "$count", Value: "count"}}}},
 		}}},
 	}
@@ -407,6 +415,7 @@ func (d *instanceDAO) Facets(ctx context.Context, tenantID int64) (*InstanceFace
 		Providers []FacetBucket `bson:"providers"`
 		Regions   []FacetBucket `bson:"regions"`
 		Sources   []FacetBucket `bson:"sources"`
+		Statuses  []FacetBucket `bson:"statuses"`
 		Total     []struct {
 			Count int64 `bson:"count"`
 		} `bson:"total"`
@@ -420,6 +429,7 @@ func (d *instanceDAO) Facets(ctx context.Context, tenantID int64) (*InstanceFace
 		out.Providers = rows[0].Providers
 		out.Regions = rows[0].Regions
 		out.Sources = rows[0].Sources
+		out.Statuses = rows[0].Statuses
 		if len(rows[0].Total) > 0 {
 			out.Total = rows[0].Total[0].Count
 		}
@@ -571,6 +581,7 @@ func aggregateStatsByIDsMatch(ids []int64, tenantID int64) bson.M {
 //     已绑定资产全部被当作「未绑定」（实测 unbound count = 实例总数 21,046）
 //  2. 绑定表里 resource_type 同时存在 `instance`（规则绑定）与 `asset`（手工绑定），
 //     原实现只匹配 `instance`，即使集合改对也会漏排手工绑定
+//
 // unboundPipeline 构造「未绑定实例」聚合管道。
 //
 // **性能约束（2026-11-19 实测）**：$lookup 必须用 localField/foreignField 的简单形态。
