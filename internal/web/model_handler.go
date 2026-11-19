@@ -162,13 +162,21 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 		return
 	}
 
+	// extensible 取值非法必须报错：旧实现把无法识别的值当作「未传」，
+	// 实测 extensible=zzz 返回全部 81 个模型。
+	extensible, boolErr := parseOptionalBoolParam(extensibleStr, "extensible")
+	if boolErr != "" {
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, boolErr))
+		return
+	}
+
 	filter := domain.ModelFilter{
 		Provider:     provider,
 		Category:     category,
 		ParentUID:    parentUID,
 		Level:        level,
 		ModelGroupID: groupID,
-		Extensible:   parseOptionalBool(extensibleStr),
+		Extensible:   extensible,
 		Offset:       offset,
 		Limit:        limit,
 	}
