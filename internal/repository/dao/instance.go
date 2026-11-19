@@ -571,28 +571,41 @@ func aggregateStatsByIDsMatch(ids []int64, tenantID int64) bson.M {
 //     已绑定资产全部被当作「未绑定」（实测 unbound count = 实例总数 21,046）
 //  2. 绑定表里 resource_type 同时存在 `instance`（规则绑定）与 `asset`（手工绑定），
 //     原实现只匹配 `instance`，即使集合改对也会漏排手工绑定
+// unboundPipeline 构造「未绑定实例」聚合管道。
+//
+// **性能约束（2026-11-19 实测）**：$lookup 必须用 localField/foreignField 的简单形态。
+// 简单形态会被优化成 SBE hash join；`let` + `pipeline` + `$expr` 形态虽然也能命中
+// ecam_resource_binding 的 resource_id 索引，但对每个实例都要跑一次子管道
+// （0.16ms × 2 万实例），实测 tenant 3：
+//
+//	形态                         limit=3   limit=50  limit=500  count
+//	let + pipeline ($expr)        3.49s     3.30s     3.46s     3.13s
+//	localField/foreignField       0.36s     0.19s     0.58s     ~0.1s
+//
+// 兄弟测试 instance_unbound_pipeline_test.go 里的「结果集等价」断言锁定了两种形态
+// 返回的是同一批实例（tenant 3 = 20172 条、tenant 1 = 240 条，逐 id 相同）。
+//
+// 语义：租户过滤在 $match；「已绑定」判定 = 存在一条 binding 满足
+// resource_id == instance.id 且 tenant_id 相同 且 resource_type ∈ {instance, asset}。
+// 租户与类型两个条件从 lookup 子管道挪到 $match 的 $elemMatch 里，语义不变。
 func (d *instanceDAO) unboundPipeline(tenantID int64) mongo.Pipeline {
 	return mongo.Pipeline{
 		// 1. 按租户过滤
 		{{Key: "$match", Value: bson.M{"tenant_id": tenantID}}},
-		// 2. LEFT JOIN binding 表: 用 instance.id 关联 binding.resource_id
+		// 2. LEFT JOIN binding 表：简单形态，per-instance 字段直连 binding.resource_id
 		{{Key: "$lookup", Value: bson.M{
-			"from": BindingCollection,
-			"let":  bson.M{"inst_id": "$id", "tenant": "$tenant_id"},
-			"pipeline": mongo.Pipeline{
-				{{Key: "$match", Value: bson.M{"$expr": bson.M{"$and": bson.A{
-					bson.M{"$eq": bson.A{"$resource_id", "$$inst_id"}},
-					bson.M{"$eq": bson.A{"$tenant_id", "$$tenant"}},
-					bson.M{"$in": bson.A{"$resource_type", bson.A{"instance", "asset"}}},
-				}}}}},
-				// 只需要知道有没有，取1条就够
-				{{Key: "$limit", Value: 1}},
-				{{Key: "$project", Value: bson.M{"_id": 1}}},
-			},
-			"as": "_bindings",
+			"from":         BindingCollection,
+			"localField":   "id",
+			"foreignField": "resource_id",
+			"as":           "_bindings",
 		}}},
-		// 3. 只保留没有 binding 的
-		{{Key: "$match", Value: bson.M{"_bindings": bson.M{"$size": 0}}}},
+		// 3. 只保留「没有同租户、类型合法的 binding」的实例。
+		//    $not + $elemMatch = 不存在任何一条满足条件的绑定。
+		//    resource_type 既有 rule 写入的 instance 也有 manual 写入的 asset，两者都算绑定。
+		{{Key: "$match", Value: bson.M{"_bindings": bson.M{"$not": bson.M{"$elemMatch": bson.M{
+			"tenant_id":     tenantID,
+			"resource_type": bson.M{"$in": bson.A{"instance", "asset"}},
+		}}}}}},
 		// 4. 去掉临时字段
 		{{Key: "$project", Value: bson.M{"_bindings": 0}}},
 	}
