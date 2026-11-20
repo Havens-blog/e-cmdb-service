@@ -90,7 +90,12 @@ type CreateTokenReq struct {
 // 「非 nil 且 len > 0」，空数组会在绑定阶段被拒成空体 400，恰好是本 PR 要
 // 修掉的「前端拿不到原因」场景。是否至少选一个事件类型由
 // service.validateEventTypes 判断，错误经 openAPIErrorMessage 翻成中文原因。
-// 该字段在 OpenAPI 规范里仍是 required（语义未变），只是拒绝位置下移。
+//
+// 因此该字段在 OpenAPI 规范里变为**可选**（cmd/openapi 只按 binding:"required"
+// 判定请求类型的必填，见 cmd/openapi/main.go 的 required 分支），docs/openapi.json
+// 的 CreateWebhookReq.required 已同步去掉 event_types；但「至少一个事件类型」仍是
+// 硬约束，拒绝位置从绑定阶段下移到 service 层。契约文档与实现语义保持一致：
+// 字段可选 ≠ 可以传空数组。
 type CreateWebhookReq struct {
 	Name       string   `json:"name" binding:"required"`
 	EventTypes []string `json:"event_types"`
