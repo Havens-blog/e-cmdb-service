@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,9 +152,10 @@ func (f *fakeTokenRepo) UpdateStatus(ctx context.Context, tenantID, id int64, st
 }
 
 type fakeWebhookRepo struct {
-	nextID  int64
-	created domain.Webhook
-	stored  []domain.Webhook
+	nextID     int64
+	created    domain.Webhook
+	stored     []domain.Webhook
+	lastUpdate domain.WebhookUpdate
 }
 
 func (f *fakeWebhookRepo) Create(ctx context.Context, webhook domain.Webhook) (int64, error) {
@@ -182,6 +184,7 @@ func (f *fakeWebhookRepo) Count(ctx context.Context, tenantID int64) (int64, err
 }
 
 func (f *fakeWebhookRepo) Update(ctx context.Context, tenantID, id int64, update domain.WebhookUpdate) error {
+	f.lastUpdate = update
 	return nil
 }
 
@@ -243,6 +246,131 @@ func TestUpdateWebhook_Validation(t *testing.T) {
 	}
 	if err := svc.UpdateWebhook(context.Background(), 10, 999, domain.WebhookUpdate{}); !errors.Is(err, errs.ErrWebhookNotFound) {
 		t.Fatalf("not found error = %v, want ErrWebhookNotFound", err)
+	}
+}
+
+// TestCreateToken_Validation 覆盖名称归一与有效期边界。
+//
+// 背景：负数 ttl_days 以前与 0 同义（都返回 0 = 永不过期），等于把「填错了」
+// 静默降级成权限最强的那种令牌；纯空白名称也会入库，列表里看不见名字。
+func TestCreateToken_Validation(t *testing.T) {
+	longName := strings.Repeat("a", maxTokenNameLength+1)
+	cases := []struct {
+		name    string
+		rawName string
+		ttlDays int
+		wantErr error
+	}{
+		{name: "empty", rawName: "", ttlDays: 1, wantErr: errs.ErrInvalidTokenName},
+		{name: "blank", rawName: "   ", ttlDays: 1, wantErr: errs.ErrInvalidTokenName},
+		{name: "too long", rawName: longName, ttlDays: 1, wantErr: errs.ErrTokenNameTooLong},
+		{name: "negative ttl", rawName: "ci", ttlDays: -5, wantErr: errs.ErrInvalidTokenTTL},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewOpenAPIService(&fakeTokenRepo{}, &fakeWebhookRepo{})
+			if _, _, err := svc.CreateToken(context.Background(), 10, tc.rawName, nil, tc.ttlDays); !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+
+	t.Run("trims name and keeps zero ttl as never-expire", func(t *testing.T) {
+		repo := &fakeTokenRepo{}
+		svc := NewOpenAPIService(repo, &fakeWebhookRepo{})
+		token, _, err := svc.CreateToken(context.Background(), 10, "  ci-deploy  ", nil, 0)
+		if err != nil {
+			t.Fatalf("CreateToken() error = %v", err)
+		}
+		if repo.created.Name != "ci-deploy" {
+			t.Fatalf("stored name = %q, want trimmed %q", repo.created.Name, "ci-deploy")
+		}
+		if token.ExpireAt != 0 {
+			t.Fatalf("expire_at = %d, want 0 (never expire)", token.ExpireAt)
+		}
+	})
+
+	t.Run("accepts name at the length limit", func(t *testing.T) {
+		svc := NewOpenAPIService(&fakeTokenRepo{}, &fakeWebhookRepo{})
+		if _, _, err := svc.CreateToken(context.Background(), 10, strings.Repeat("a", maxTokenNameLength), nil, 1); err != nil {
+			t.Fatalf("name at limit should pass: %v", err)
+		}
+	})
+}
+
+// TestCreateWebhook_Normalization 覆盖 Webhook 创建的名称/地址归一与长度上限。
+func TestCreateWebhook_Normalization(t *testing.T) {
+	const (
+		validEvents = "instance.created"
+		validURL    = "https://example.com/hook"
+	)
+	phone := []string{validEvents}
+
+	cases := []struct {
+		name      string
+		rawName   string
+		events    []string
+		targetURL string
+		wantErr   error
+	}{
+		{name: "blank name", rawName: "  ", events: phone, targetURL: validURL, wantErr: errs.ErrInvalidWebhookName},
+		{name: "name too long", rawName: strings.Repeat("w", maxWebhookNameLength+1), events: phone, targetURL: validURL, wantErr: errs.ErrWebhookNameTooLong},
+		{name: "blank url", rawName: "w", events: phone, targetURL: "   ", wantErr: errs.ErrInvalidTargetURL},
+		{name: "url too long", rawName: "w", events: phone, targetURL: validURL + strings.Repeat("a", maxTargetURLLength), wantErr: errs.ErrTargetURLTooLong},
+		{name: "empty events", rawName: "w", events: nil, targetURL: validURL, wantErr: errs.ErrInvalidEventType},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewOpenAPIService(&fakeTokenRepo{}, &fakeWebhookRepo{})
+			_, err := svc.CreateWebhook(context.Background(), 10, tc.rawName, tc.events, tc.targetURL, "")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+
+	t.Run("trims name and url", func(t *testing.T) {
+		repo := &fakeWebhookRepo{}
+		svc := NewOpenAPIService(&fakeTokenRepo{}, repo)
+		if _, err := svc.CreateWebhook(context.Background(), 10, "  hook  ", phone, "  "+validURL+"  ", ""); err != nil {
+			t.Fatalf("CreateWebhook() error = %v", err)
+		}
+		if repo.created.Name != "hook" {
+			t.Fatalf("stored name = %q, want %q", repo.created.Name, "hook")
+		}
+		if repo.created.TargetURL != validURL {
+			t.Fatalf("stored target_url = %q, want %q", repo.created.TargetURL, validURL)
+		}
+	})
+}
+
+// TestUpdateWebhook_Normalization 保证更新路径与创建路径用同一套规则。
+func TestUpdateWebhook_Normalization(t *testing.T) {
+	repo := &fakeWebhookRepo{}
+	svc := NewOpenAPIService(&fakeTokenRepo{}, repo)
+	if _, err := svc.CreateWebhook(context.Background(), 10, "hook", []string{"instance.created"}, "https://example.com/hook", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	blank := "   "
+	if err := svc.UpdateWebhook(context.Background(), 10, 1, domain.WebhookUpdate{Name: &blank}); !errors.Is(err, errs.ErrInvalidWebhookName) {
+		t.Fatalf("blank name error = %v, want ErrInvalidWebhookName", err)
+	}
+	tooLong := strings.Repeat("w", maxWebhookNameLength+1)
+	if err := svc.UpdateWebhook(context.Background(), 10, 1, domain.WebhookUpdate{Name: &tooLong}); !errors.Is(err, errs.ErrWebhookNameTooLong) {
+		t.Fatalf("long name error = %v, want ErrWebhookNameTooLong", err)
+	}
+	longURL := "https://example.com/" + strings.Repeat("a", maxTargetURLLength)
+	if err := svc.UpdateWebhook(context.Background(), 10, 1, domain.WebhookUpdate{TargetURL: &longURL}); !errors.Is(err, errs.ErrTargetURLTooLong) {
+		t.Fatalf("long url error = %v, want ErrTargetURLTooLong", err)
+	}
+
+	padded := "  new-hook  "
+	if err := svc.UpdateWebhook(context.Background(), 10, 1, domain.WebhookUpdate{Name: &padded}); err != nil {
+		t.Fatalf("valid update error = %v", err)
+	}
+	if repo.lastUpdate.Name == nil || *repo.lastUpdate.Name != "new-hook" {
+		t.Fatalf("persisted name = %v, want trimmed %q", repo.lastUpdate.Name, "new-hook")
 	}
 }
 
