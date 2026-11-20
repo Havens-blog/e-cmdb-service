@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -15,6 +17,20 @@ import (
 
 // defaultTokenScopes API Token 默认权限范围；当前仅存储，不做鉴权 enforcement。
 var defaultTokenScopes = []string{"read", "write"}
+
+// 名称与目标地址的长度上限。上限存在的意义是可用性而不是安全：列表页按名称
+// 渲染，无上限的名称会把表格挤成一行字，用户看不出该吊销哪一个。
+const (
+	maxTokenNameLength   = 64
+	maxWebhookNameLength = 64
+	maxTargetURLLength   = 2048
+	// maxTokenTTLDays 令牌有效期的天数上限（10 年），与前端 el-input-number 的
+	// :max="3650" 保持一致。上限不是业务洁癖：expireAtMillis 若用
+	// time.Duration(ttlDays)*24*time.Hour 计算，ttlDays 超过约 106751 天时
+	// 乘法会静默溢出 int64 纳秒，`now.Add(...)` 反而得到过去的时间戳——
+	// 「有效期很长」的请求会变成「创建即过期」的令牌。
+	maxTokenTTLDays = 3650
+)
 
 // validEventTypes Webhook 合法事件类型（当前仅存储，不做投递）。
 var validEventTypes = map[string]struct{}{
@@ -48,12 +64,27 @@ func NewOpenAPIService(tokenRepo repository.ApiTokenRepository, webhookRepo repo
 }
 
 // CreateToken 创建 API Token，返回领域模型与仅此一次可见的明文 token。
+//
+// 名称按 trim 后判空与计长：纯空白名称会写进列表却显示为空白，用户无法分辨
+// 该吊销哪一个。ttlDays 只接受「0 或 0..maxTokenTTLDays」——0 是产品已确认的
+// 「永不过期」；负数一律拒绝（历史实现把负数当成 0 静默放行，等于把无效输入
+// 降级成权限最强的那种令牌）；超过上限也拒绝，避免溢出成「创建即过期」。
 func (s *openAPIService) CreateToken(ctx context.Context, tenantID int64, name string, scopes []string, ttlDays int) (domain.ApiToken, string, error) {
 	if tenantID == 0 {
 		return domain.ApiToken{}, "", errs.ErrInvalidTenantID
 	}
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return domain.ApiToken{}, "", errs.ErrInvalidTokenName
+	}
+	if utf8.RuneCountInString(name) > maxTokenNameLength {
+		return domain.ApiToken{}, "", errs.ErrTokenNameTooLong
+	}
+	if ttlDays < 0 {
+		return domain.ApiToken{}, "", errs.ErrInvalidTokenTTL
+	}
+	if ttlDays > maxTokenTTLDays {
+		return domain.ApiToken{}, "", errs.ErrTokenTTLTooLarge
 	}
 
 	plain, hash, err := generateAPIToken()
@@ -112,15 +143,26 @@ func (s *openAPIService) RevokeToken(ctx context.Context, tenantID int64, id int
 }
 
 // CreateWebhook 创建 Webhook 订阅。
+//
+// name 与 targetURL 同样按 trim 后判空与计长，理由与 CreateToken 一致；
+// eventTypes 必须是非空子集，由 validateEventTypes 逐项校验。
 func (s *openAPIService) CreateWebhook(ctx context.Context, tenantID int64, name string, eventTypes []string, targetURL, secret string) (int64, error) {
 	if tenantID == 0 {
 		return 0, errs.ErrInvalidTenantID
 	}
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return 0, errs.ErrInvalidWebhookName
 	}
+	if utf8.RuneCountInString(name) > maxWebhookNameLength {
+		return 0, errs.ErrWebhookNameTooLong
+	}
+	targetURL = strings.TrimSpace(targetURL)
 	if targetURL == "" {
 		return 0, errs.ErrInvalidTargetURL
+	}
+	if utf8.RuneCountInString(targetURL) > maxTargetURLLength {
+		return 0, errs.ErrTargetURLTooLong
 	}
 	if err := validateEventTypes(eventTypes); err != nil {
 		return 0, err
@@ -154,6 +196,35 @@ func (s *openAPIService) ListWebhooks(ctx context.Context, tenantID int64, offse
 	return webhooks, total, nil
 }
 
+// normalizeWebhookUpdate 把部分更新里的名称与目标地址按 trim + 长度上限归一，
+// 并把归一后的值写回 update，供后续持久化使用。
+//
+// 更新路径必须与创建路径用同一套规则：只校验创建会让「先建合法、再改空白」
+// 绕过限制，列表里照样出现看不见名字的订阅。
+func normalizeWebhookUpdate(update domain.WebhookUpdate) (domain.WebhookUpdate, error) {
+	if update.Name != nil {
+		name := strings.TrimSpace(*update.Name)
+		if name == "" {
+			return update, errs.ErrInvalidWebhookName
+		}
+		if utf8.RuneCountInString(name) > maxWebhookNameLength {
+			return update, errs.ErrWebhookNameTooLong
+		}
+		update.Name = &name
+	}
+	if update.TargetURL != nil {
+		targetURL := strings.TrimSpace(*update.TargetURL)
+		if targetURL == "" {
+			return update, errs.ErrInvalidTargetURL
+		}
+		if utf8.RuneCountInString(targetURL) > maxTargetURLLength {
+			return update, errs.ErrTargetURLTooLong
+		}
+		update.TargetURL = &targetURL
+	}
+	return update, nil
+}
+
 // UpdateWebhook 按租户与 ID 部分更新 Webhook。
 func (s *openAPIService) UpdateWebhook(ctx context.Context, tenantID int64, id int64, update domain.WebhookUpdate) error {
 	existing, err := s.webhookRepo.GetByID(ctx, tenantID, id)
@@ -163,11 +234,10 @@ func (s *openAPIService) UpdateWebhook(ctx context.Context, tenantID int64, id i
 	if existing.ID == 0 {
 		return errs.ErrWebhookNotFound
 	}
-	if update.Name != nil && *update.Name == "" {
-		return errs.ErrInvalidWebhookName
-	}
-	if update.TargetURL != nil && *update.TargetURL == "" {
-		return errs.ErrInvalidTargetURL
+
+	update, err = normalizeWebhookUpdate(update)
+	if err != nil {
+		return err
 	}
 	if update.Status != nil && !validWebhookStatus(*update.Status) {
 		return errs.ErrInvalidStatus
@@ -209,11 +279,15 @@ func hashToken(token string) string {
 }
 
 // expireAtMillis 计算过期毫秒时间戳；ttlDays <= 0 返回 0（永不过期）。
+//
+// 用 AddDate 而非 Add(time.Duration(ttlDays)*24*time.Hour)：后者在 ttlDays
+// 极大时会把纳秒乘积溢出成负数，得到落在过去的过期时间。service 层已有
+// maxTokenTTLDays 上限，这里再用 AddDate 做纵深防御，避免上限被调整后复发。
 func expireAtMillis(ttlDays int, now time.Time) int64 {
 	if ttlDays <= 0 {
 		return 0
 	}
-	return now.Add(time.Duration(ttlDays) * 24 * time.Hour).UnixMilli()
+	return now.AddDate(0, 0, ttlDays).UnixMilli()
 }
 
 // normalizeTokenScopes 空 scopes 时返回默认权限范围。
@@ -237,6 +311,11 @@ func validEventType(typ string) bool {
 
 // validateEventTypes 校验事件类型列表。
 func validateEventTypes(types []string) error {
+	// 空列表以前是被 handler 的 binding:"required" 挡住的；为了让错误信息可读，
+	// 那层校验已下移到 service，这里必须自己拒绝空列表，否则订阅永不触发。
+	if len(types) == 0 {
+		return errs.ErrInvalidEventType
+	}
 	for _, typ := range types {
 		if !validEventType(typ) {
 			return errs.ErrInvalidEventType
