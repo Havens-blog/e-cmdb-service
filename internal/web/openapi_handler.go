@@ -54,6 +54,8 @@ func openAPIErrorMessage(err error) string {
 		return "令牌名称不能超过 64 个字符"
 	case errors.Is(err, errs.ErrInvalidTokenTTL):
 		return "有效期天数不能为负数（填 0 表示永不过期）"
+	case errors.Is(err, errs.ErrTokenTTLTooLarge):
+		return "有效期天数不能超过 3650 天（填 0 表示永不过期）"
 	case errors.Is(err, errs.ErrInvalidWebhookName):
 		return "Webhook 名称不能为空"
 	case errors.Is(err, errs.ErrWebhookNameTooLong):
@@ -83,9 +85,15 @@ type CreateTokenReq struct {
 }
 
 // CreateWebhookReq 创建 Webhook 请求；分层同 CreateTokenReq。
+//
+// EventTypes 刻意不加 binding:"required"：gin 对 slice 的 required 是
+// 「非 nil 且 len > 0」，空数组会在绑定阶段被拒成空体 400，恰好是本 PR 要
+// 修掉的「前端拿不到原因」场景。是否至少选一个事件类型由
+// service.validateEventTypes 判断，错误经 openAPIErrorMessage 翻成中文原因。
+// 该字段在 OpenAPI 规范里仍是 required（语义未变），只是拒绝位置下移。
 type CreateWebhookReq struct {
 	Name       string   `json:"name" binding:"required"`
-	EventTypes []string `json:"event_types" binding:"required"`
+	EventTypes []string `json:"event_types"`
 	TargetURL  string   `json:"target_url" binding:"required"`
 	Secret     string   `json:"secret"`
 }

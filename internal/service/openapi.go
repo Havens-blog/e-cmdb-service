@@ -24,6 +24,12 @@ const (
 	maxTokenNameLength   = 64
 	maxWebhookNameLength = 64
 	maxTargetURLLength   = 2048
+	// maxTokenTTLDays 令牌有效期的天数上限（10 年），与前端 el-input-number 的
+	// :max="3650" 保持一致。上限不是业务洁癖：expireAtMillis 若用
+	// time.Duration(ttlDays)*24*time.Hour 计算，ttlDays 超过约 106751 天时
+	// 乘法会静默溢出 int64 纳秒，`now.Add(...)` 反而得到过去的时间戳——
+	// 「有效期很长」的请求会变成「创建即过期」的令牌。
+	maxTokenTTLDays = 3650
 )
 
 // validEventTypes Webhook 合法事件类型（当前仅存储，不做投递）。
@@ -60,9 +66,9 @@ func NewOpenAPIService(tokenRepo repository.ApiTokenRepository, webhookRepo repo
 // CreateToken 创建 API Token，返回领域模型与仅此一次可见的明文 token。
 //
 // 名称按 trim 后判空与计长：纯空白名称会写进列表却显示为空白，用户无法分辨
-// 该吊销哪一个。ttlDays 只接受「0 或正数」——0 是产品已确认的「永不过期」，
-// 负数则一律拒绝；历史实现把负数当成 0 静默放行，等于把无效输入降级成权限
-// 最强的那种令牌（永不过期），这是必须堵住的语义反转。
+// 该吊销哪一个。ttlDays 只接受「0 或 0..maxTokenTTLDays」——0 是产品已确认的
+// 「永不过期」；负数一律拒绝（历史实现把负数当成 0 静默放行，等于把无效输入
+// 降级成权限最强的那种令牌）；超过上限也拒绝，避免溢出成「创建即过期」。
 func (s *openAPIService) CreateToken(ctx context.Context, tenantID int64, name string, scopes []string, ttlDays int) (domain.ApiToken, string, error) {
 	if tenantID == 0 {
 		return domain.ApiToken{}, "", errs.ErrInvalidTenantID
@@ -76,6 +82,9 @@ func (s *openAPIService) CreateToken(ctx context.Context, tenantID int64, name s
 	}
 	if ttlDays < 0 {
 		return domain.ApiToken{}, "", errs.ErrInvalidTokenTTL
+	}
+	if ttlDays > maxTokenTTLDays {
+		return domain.ApiToken{}, "", errs.ErrTokenTTLTooLarge
 	}
 
 	plain, hash, err := generateAPIToken()
@@ -152,7 +161,7 @@ func (s *openAPIService) CreateWebhook(ctx context.Context, tenantID int64, name
 	if targetURL == "" {
 		return 0, errs.ErrInvalidTargetURL
 	}
-	if len(targetURL) > maxTargetURLLength {
+	if utf8.RuneCountInString(targetURL) > maxTargetURLLength {
 		return 0, errs.ErrTargetURLTooLong
 	}
 	if err := validateEventTypes(eventTypes); err != nil {
@@ -208,7 +217,7 @@ func normalizeWebhookUpdate(update domain.WebhookUpdate) (domain.WebhookUpdate, 
 		if targetURL == "" {
 			return update, errs.ErrInvalidTargetURL
 		}
-		if len(targetURL) > maxTargetURLLength {
+		if utf8.RuneCountInString(targetURL) > maxTargetURLLength {
 			return update, errs.ErrTargetURLTooLong
 		}
 		update.TargetURL = &targetURL
@@ -270,11 +279,15 @@ func hashToken(token string) string {
 }
 
 // expireAtMillis 计算过期毫秒时间戳；ttlDays <= 0 返回 0（永不过期）。
+//
+// 用 AddDate 而非 Add(time.Duration(ttlDays)*24*time.Hour)：后者在 ttlDays
+// 极大时会把纳秒乘积溢出成负数，得到落在过去的过期时间。service 层已有
+// maxTokenTTLDays 上限，这里再用 AddDate 做纵深防御，避免上限被调整后复发。
 func expireAtMillis(ttlDays int, now time.Time) int64 {
 	if ttlDays <= 0 {
 		return 0
 	}
-	return now.Add(time.Duration(ttlDays) * 24 * time.Hour).UnixMilli()
+	return now.AddDate(0, 0, ttlDays).UnixMilli()
 }
 
 // normalizeTokenScopes 空 scopes 时返回默认权限范围。

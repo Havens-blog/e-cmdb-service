@@ -22,6 +22,7 @@ func TestOpenAPIErrorMessage(t *testing.T) {
 		{name: "empty token name", err: errs.ErrInvalidTokenName, want: "令牌名称不能为空"},
 		{name: "token name too long", err: errs.ErrTokenNameTooLong, want: "令牌名称不能超过 64 个字符"},
 		{name: "negative ttl", err: errs.ErrInvalidTokenTTL, want: "有效期天数不能为负数（填 0 表示永不过期）"},
+		{name: "ttl too large", err: errs.ErrTokenTTLTooLarge, want: "有效期天数不能超过 3650 天（填 0 表示永不过期）"},
 		{name: "empty webhook name", err: errs.ErrInvalidWebhookName, want: "Webhook 名称不能为空"},
 		{name: "webhook name too long", err: errs.ErrWebhookNameTooLong, want: "Webhook 名称不能超过 64 个字符"},
 		{name: "empty target url", err: errs.ErrInvalidTargetURL, want: "回调地址不能为空"},

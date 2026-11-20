@@ -265,6 +265,10 @@ func TestCreateToken_Validation(t *testing.T) {
 		{name: "blank", rawName: "   ", ttlDays: 1, wantErr: errs.ErrInvalidTokenName},
 		{name: "too long", rawName: longName, ttlDays: 1, wantErr: errs.ErrTokenNameTooLong},
 		{name: "negative ttl", rawName: "ci", ttlDays: -5, wantErr: errs.ErrInvalidTokenTTL},
+		{name: "ttl beyond maximum", rawName: "ci", ttlDays: maxTokenTTLDays + 1, wantErr: errs.ErrTokenTTLTooLarge},
+		// 极端值必须走拒绝而不是交给 expireAtMillis：老实现把 ttlDays 乘成纳秒
+		// 后溢出 int64，会得到一个落在过去的过期时间（创建即过期）。
+		{name: "ttl far beyond maximum", rawName: "ci", ttlDays: 1 << 40, wantErr: errs.ErrTokenTTLTooLarge},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -296,6 +300,13 @@ func TestCreateToken_Validation(t *testing.T) {
 			t.Fatalf("name at limit should pass: %v", err)
 		}
 	})
+
+	t.Run("accepts ttl at the maximum", func(t *testing.T) {
+		svc := NewOpenAPIService(&fakeTokenRepo{}, &fakeWebhookRepo{})
+		if _, _, err := svc.CreateToken(context.Background(), 10, "ci", nil, maxTokenTTLDays); err != nil {
+			t.Fatalf("ttl at limit should pass: %v", err)
+		}
+	})
 }
 
 // TestCreateWebhook_Normalization 覆盖 Webhook 创建的名称/地址归一与长度上限。
@@ -318,6 +329,11 @@ func TestCreateWebhook_Normalization(t *testing.T) {
 		{name: "blank url", rawName: "w", events: phone, targetURL: "   ", wantErr: errs.ErrInvalidTargetURL},
 		{name: "url too long", rawName: "w", events: phone, targetURL: validURL + strings.Repeat("a", maxTargetURLLength), wantErr: errs.ErrTargetURLTooLong},
 		{name: "empty events", rawName: "w", events: nil, targetURL: validURL, wantErr: errs.ErrInvalidEventType},
+		{name: "empty events slice", rawName: "w", events: []string{}, targetURL: validURL, wantErr: errs.ErrInvalidEventType},
+		// 长度按 code point 计：2048 个中文字符的地址字节数远超 2048，但字符数
+		// 正好在上限，必须放行，否则提示「不能超过 2048 个字符」与实现不符。
+		{name: "url at the rune limit", rawName: "w", events: phone, targetURL: "https://example.com/" + strings.Repeat("字", maxTargetURLLength-20)},
+		{name: "url beyond the rune limit", rawName: "w", events: phone, targetURL: "https://example.com/" + strings.Repeat("字", maxTargetURLLength), wantErr: errs.ErrTargetURLTooLong},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

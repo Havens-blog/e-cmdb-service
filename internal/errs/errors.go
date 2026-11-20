@@ -102,6 +102,7 @@ var (
 	ErrInvalidTokenName   = errors.New("token name cannot be empty")
 	ErrTokenNameTooLong   = errors.New("token name is too long")
 	ErrInvalidTokenTTL    = errors.New("token ttl_days cannot be negative")
+	ErrTokenTTLTooLarge   = errors.New("token ttl_days exceeds the maximum")
 	ErrInvalidWebhookName = errors.New("webhook name cannot be empty")
 	ErrWebhookNameTooLong = errors.New("webhook name is too long")
 	ErrInvalidTargetURL   = errors.New("webhook target_url cannot be empty")
