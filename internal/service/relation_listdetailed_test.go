@@ -60,7 +60,7 @@ func TestListDetailed(t *testing.T) {
 			total: 1,
 		}
 
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 		details, total, err := svc.ListDetailed(context.Background(), domain.InstanceRelationFilter{TenantID: 3})
 		if err != nil {
 			t.Fatalf("ListDetailed 应成功: %v", err)
@@ -89,7 +89,7 @@ func TestListDetailed(t *testing.T) {
 			total: 1,
 		}
 
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 		details, _, err := svc.ListDetailed(context.Background(), domain.InstanceRelationFilter{TenantID: 3})
 		if err != nil {
 			t.Fatalf("端点缺失不应报错: %v", err)
@@ -111,7 +111,7 @@ func TestListDetailed(t *testing.T) {
 			total: 1,
 		}
 
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 		details, total, err := svc.ListDetailed(context.Background(), domain.InstanceRelationFilter{TenantID: 3})
 		if err != nil {
 			t.Fatalf("解析失败不应报错: %v", err)
@@ -139,7 +139,7 @@ func TestListDetailed(t *testing.T) {
 			total: 2,
 		}
 
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 		details, _, err := svc.ListDetailed(context.Background(), domain.InstanceRelationFilter{TenantID: 3})
 		if err != nil {
 			t.Fatalf("ListDetailed 应成功: %v", err)

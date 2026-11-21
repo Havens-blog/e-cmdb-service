@@ -31,27 +31,27 @@ type relationService struct {
 	repo repository.InstanceRelationRepository
 	// instanceRepo 用于推导关系时读取实例（按租户过滤）
 	instanceRepo repository.InstanceRepository
+	// modelRelRepo 用于读取关系类型声明的源/目标模型，创建前校验模型对
+	modelRelRepo repository.ModelRelationTypeRepository
 	logger       *elog.Component
 }
 
 // NewRelationService 创建关系服务
-func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo repository.InstanceRepository) RelationService {
+func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo repository.InstanceRepository, modelRelRepo repository.ModelRelationTypeRepository) RelationService {
 	return &relationService{
 		repo:         repo,
 		instanceRepo: instanceRepo,
+		modelRelRepo: modelRelRepo,
 		logger:       elog.DefaultLogger,
 	}
 }
 
-// validateInstancesExist 校验关系两端实例存在（同租户）。
+// loadEndpointModels 加载关系两端实例的模型 UID（同租户），同时校验每个 id 都存在。
 //
 // 缺陷背景（实测 2026-11-17）：Create 只做查重、不校验端点实例，历史上产生了
 // 8 条两端皆亡的悬空关系（数据质量页 dangling_relation）。删除实例虽已级联解除
 // 关系，但通过 API/批量推送仍可制造新的悬空引用，故在写入前拦截。
-func (s *relationService) validateInstancesExist(ctx context.Context, tenantID int64, ids []int64) error {
-	if s.instanceRepo == nil {
-		return nil
-	}
+func (s *relationService) loadEndpointModels(ctx context.Context, tenantID int64, ids []int64) (map[int64]string, error) {
 	uniq := make([]int64, 0, len(ids))
 	seen := make(map[int64]bool, len(ids))
 	for _, id := range ids {
@@ -63,22 +63,86 @@ func (s *relationService) validateInstancesExist(ctx context.Context, tenantID i
 	}
 	instances, err := s.instanceRepo.ListByIDs(ctx, uniq, tenantID)
 	if err != nil {
-		return fmt.Errorf("failed to check instances existence: %w", err)
+		return nil, fmt.Errorf("failed to check instances existence: %w", err)
 	}
-	found := make(map[int64]bool, len(instances))
+	models := make(map[int64]string, len(instances))
 	for _, inst := range instances {
-		found[inst.ID] = true
+		models[inst.ID] = inst.ModelUID
 	}
 	for _, id := range uniq {
-		if !found[id] {
-			return fmt.Errorf("%w: instance_id=%d", errs.ErrInstanceNotFound, id)
+		if _, ok := models[id]; !ok {
+			return nil, fmt.Errorf("%w: instance_id=%d", errs.ErrInstanceNotFound, id)
+		}
+	}
+	return models, nil
+}
+
+// validateRelationEndpoints 校验关系两端实例存在（同租户）且模型符合关系类型声明。
+//
+// 缺陷背景（实测 2026-11-18）：Create/CreateBatch 此前只校验端点是否存在，
+// 不校验模型对，于是可以用 vpc_subnet（声明 vpc → subnet）把两个 host 实例连起来，
+// 关系的方向与基数语义因此不成立，拓扑与影响分析会给出错误结论。
+// 实测现存 1304 条实例关系全部符合各自关系类型声明的模型对，说明该校验与既有数据兼容。
+func (s *relationService) validateRelationEndpoints(ctx context.Context, relations []domain.InstanceRelation) error {
+	if s.instanceRepo == nil || len(relations) == 0 {
+		return nil
+	}
+	idsByTenant := make(map[int64][]int64, 4)
+	for _, rel := range relations {
+		idsByTenant[rel.TenantID] = append(idsByTenant[rel.TenantID], rel.SourceInstanceID, rel.TargetInstanceID)
+	}
+	typeCache := make(map[string]domain.ModelRelationType, len(relations))
+	for tenantID, ids := range idsByTenant {
+		models, err := s.loadEndpointModels(ctx, tenantID, ids)
+		if err != nil {
+			return err
+		}
+		for _, rel := range relations {
+			if rel.TenantID != tenantID {
+				continue
+			}
+			if err := s.validateModelPair(ctx, rel, models, typeCache); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
+// validateModelPair 校验单条关系两端的模型与关系类型声明一致。
+// modelRelRepo 未注入时跳过模型校验（仅保留端点存在性校验），便于单测与旧装配路径。
+func (s *relationService) validateModelPair(
+	ctx context.Context,
+	rel domain.InstanceRelation,
+	models map[int64]string,
+	cache map[string]domain.ModelRelationType,
+) error {
+	if s.modelRelRepo == nil {
+		return nil
+	}
+	relType, ok := cache[rel.RelationTypeUID]
+	if !ok {
+		loaded, err := s.modelRelRepo.GetByUID(ctx, rel.RelationTypeUID)
+		if err != nil {
+			return fmt.Errorf("failed to load relation type %q: %w", rel.RelationTypeUID, err)
+		}
+		if loaded.ID == 0 {
+			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrInvalidRelation, rel.RelationTypeUID)
+		}
+		relType = loaded
+		cache[rel.RelationTypeUID] = loaded
+	}
+	sourceModel := models[rel.SourceInstanceID]
+	targetModel := models[rel.TargetInstanceID]
+	if sourceModel == relType.SourceModelUID && targetModel == relType.TargetModelUID {
+		return nil
+	}
+	return fmt.Errorf("%w: relation_type=%s declared=%s->%s actual=%s->%s",
+		errs.ErrRelationModelMismatch, rel.RelationTypeUID, relType.SourceModelUID, relType.TargetModelUID, sourceModel, targetModel)
+}
+
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {
-	if err := s.validateInstancesExist(ctx, relation.TenantID, []int64{relation.SourceInstanceID, relation.TargetInstanceID}); err != nil {
+	if err := s.validateRelationEndpoints(ctx, []domain.InstanceRelation{relation}); err != nil {
 		return 0, err
 	}
 	exists, err := s.repo.Exists(ctx, relation.TenantID, relation.SourceInstanceID, relation.TargetInstanceID, relation.RelationTypeUID)
@@ -96,15 +160,9 @@ func (s *relationService) CreateBatch(ctx context.Context, relations []domain.In
 	if len(relations) == 0 {
 		return 0, nil
 	}
-	// 每条关系按各自租户校验端点；全部通过才写入，避免部分写入产生悬空引用
-	idsByTenant := make(map[int64][]int64, 4)
-	for _, r := range relations {
-		idsByTenant[r.TenantID] = append(idsByTenant[r.TenantID], r.SourceInstanceID, r.TargetInstanceID)
-	}
-	for tenantID, ids := range idsByTenant {
-		if err := s.validateInstancesExist(ctx, tenantID, ids); err != nil {
-			return 0, err
-		}
+	// 校验端点存在性与模型对（按租户聚合）；全部通过才写入，避免部分写入产生非法关系
+	if err := s.validateRelationEndpoints(ctx, relations); err != nil {
+		return 0, err
 	}
 	return s.repo.CreateBatch(ctx, relations)
 }
