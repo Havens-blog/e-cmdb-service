@@ -88,6 +88,11 @@ func (s *modelService) List(ctx context.Context, filter domain.ModelFilter) ([]d
 }
 
 func (s *modelService) Update(ctx context.Context, model domain.Model) error {
+	// 与 Create 同口径：裁剪并校验必填项，否则 PUT 可以用单个空格把名称改成「空」。
+	if err := model.Validate(); err != nil {
+		return err
+	}
+
 	exists, err := s.repo.Exists(ctx, model.UID)
 	if err != nil {
 		return fmt.Errorf("failed to check model existence: %w", err)

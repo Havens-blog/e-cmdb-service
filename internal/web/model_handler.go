@@ -1,6 +1,8 @@
 package web
 
 import (
+	"strings"
+
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 
@@ -105,7 +107,7 @@ func (h *ModelHandler) Create(ctx *gin.Context, req CreateModelReq) (ginx.Result
 
 // GetByUID 根据UID获取模型
 func (h *ModelHandler) GetByUID(ctx *gin.Context) {
-	uid := ctx.Param("uid")
+	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	model, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
@@ -199,7 +201,7 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 
 // Update 更新模型
 func (h *ModelHandler) Update(ctx *gin.Context, req UpdateModelReq) (ginx.Result, error) {
-	uid := ctx.Param("uid")
+	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	existing, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
@@ -238,7 +240,7 @@ func (h *ModelHandler) Update(ctx *gin.Context, req UpdateModelReq) (ginx.Result
 
 // Delete 删除模型
 func (h *ModelHandler) Delete(ctx *gin.Context) {
-	uid := ctx.Param("uid")
+	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	err := h.svc.Delete(ctx.Request.Context(), uid)
 	if err != nil {

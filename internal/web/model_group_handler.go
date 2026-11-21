@@ -162,7 +162,7 @@ func (h *ModelGroupHandler) ListWithModels(ctx *gin.Context) {
 
 // GetByUID 根据UID获取模型分组
 func (h *ModelGroupHandler) GetByUID(ctx *gin.Context) {
-	uid := ctx.Param("uid")
+	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	group, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
@@ -179,7 +179,7 @@ func (h *ModelGroupHandler) GetByUID(ctx *gin.Context) {
 
 // Update 更新模型分组
 func (h *ModelGroupHandler) Update(ctx *gin.Context, req UpdateModelGroupReq) (ginx.Result, error) {
-	uid := ctx.Param("uid")
+	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	group := domain.ModelGroup{
 		UID:         strings.TrimSpace(uid),
@@ -202,7 +202,7 @@ func (h *ModelGroupHandler) Update(ctx *gin.Context, req UpdateModelGroupReq) (g
 
 // Delete 删除模型分组
 func (h *ModelGroupHandler) Delete(ctx *gin.Context) {
-	uid := ctx.Param("uid")
+	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	err := h.svc.Delete(ctx.Request.Context(), uid)
 	if err != nil {

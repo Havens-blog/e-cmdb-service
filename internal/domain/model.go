@@ -45,6 +45,8 @@ func (m *Model) Validate() error {
 	m.UID = strings.TrimSpace(m.UID)
 	m.Name = strings.TrimSpace(m.Name)
 	m.Category = strings.TrimSpace(m.Category)
+	m.Icon = strings.TrimSpace(m.Icon)
+	m.Description = strings.TrimSpace(m.Description)
 	if m.UID == "" {
 		return errs.ErrInvalidModelUID
 	}
