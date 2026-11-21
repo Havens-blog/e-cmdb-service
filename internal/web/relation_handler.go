@@ -302,6 +302,14 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, errs.ErrInstanceNotFound):
 		return ErrorResultWithMsg(errs.ParamsError,
 			"关联的资产不存在或已被删除，请刷新后重试"), true
+	case errors.Is(err, errs.ErrRelationModelMismatch):
+		// 关系类型声明了固定的「源模型 → 目标模型」，两端实例模型必须匹配，
+		// 否则方向与基数语义不成立（实测可用 vpc_subnet 连接两个 host 实例）。
+		return ErrorResultWithMsg(errs.RelationModelMismatch,
+			"所选关系类型要求固定的资产类型组合，当前源资产或目标资产的类型不符合，请重新选择"), true
+	case errors.Is(err, errs.ErrInvalidRelation):
+		return ErrorResultWithMsg(errs.RelationInvalid,
+			"关系类型不存在或已被删除，请刷新后重新选择"), true
 	}
 	return ginx.Result{}, false
 }

@@ -65,9 +65,10 @@ func InitModule(db *mongox.Mongo) *Module {
 	// changeHistoryRepo 用于实例变更审计（变更前后值写入 ecam_change_history）
 	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo, changeHistoryRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
-	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
-	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
-	// instRelRepo：删除模型关系类型前统计在用资产关系（跨租户），用于删除保护
+	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系；
+	// 注入 modelRelRepo：创建关系前校验两端实例的模型符合关系类型声明的模型对
+	relationSvc := service.NewRelationService(relationRepo, instanceRepo, modelRelRepo)
+	// instRelRepo（relationRepo）：删除模型关系类型前统计在用资产关系（跨租户），用于删除保护
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo, relationRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)

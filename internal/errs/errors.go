@@ -42,6 +42,9 @@ var (
 	RelationNotFound = ErrorCode{Code: 404003, Msg: "relation not found"}
 	RelationExists   = ErrorCode{Code: 409003, Msg: "relation already exists"}
 	RelationInvalid  = ErrorCode{Code: 400004, Msg: "relation invalid"}
+	// RelationModelMismatch: 关系类型声明了固定的「源模型 → 目标模型」，
+	// 两端实例的模型必须与之匹配，否则关系语义（方向/基数）无法成立。
+	RelationModelMismatch = ErrorCode{Code: 400010, Msg: "relation model mismatch"}
 )
 
 // 属性相关错误码
@@ -83,9 +86,10 @@ var (
 	ErrInstanceExists    = errors.New("instance already exists")
 	ErrInvalidAttributes = errors.New("invalid attributes")
 
-	ErrRelationNotFound = errors.New("relation not found")
-	ErrRelationExists   = errors.New("relation already exists")
-	ErrInvalidRelation  = errors.New("invalid relation")
+	ErrRelationNotFound      = errors.New("relation not found")
+	ErrRelationExists        = errors.New("relation already exists")
+	ErrInvalidRelation       = errors.New("invalid relation")
+	ErrRelationModelMismatch = errors.New("relation model mismatch")
 
 	ErrAttributeNotFound = errors.New("attribute not found")
 	ErrAttributeExists   = errors.New("attribute already exists")
