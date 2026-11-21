@@ -65,8 +65,9 @@ func InitModule(db *mongox.Mongo) *Module {
 	// changeHistoryRepo 用于实例变更审计（变更前后值写入 ecam_change_history）
 	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo, changeHistoryRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
-	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
-	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
+	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系；
+	// 注入 modelRelRepo：创建关系前校验两端实例的模型符合关系类型声明的模型对
+	relationSvc := service.NewRelationService(relationRepo, instanceRepo, modelRelRepo)
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)
