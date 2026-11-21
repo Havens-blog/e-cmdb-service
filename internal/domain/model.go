@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -35,8 +36,15 @@ type ModelFilter struct {
 	Limit        int
 }
 
-// Validate 验证模型数据
+// Validate 验证模型数据。
+//
+// 先裁剪首尾空白再判空：gin 的 binding:"required" 只拒绝空字符串，
+// 实测 uid/name/category 传单个空格可以通过校验直接落库（模型列表里出现一个没有名字的空卡片）。
+// 裁剪同时回写到接收者，保证后续唯一性检查与落库使用同一个规范化后的 UID。
 func (m *Model) Validate() error {
+	m.UID = strings.TrimSpace(m.UID)
+	m.Name = strings.TrimSpace(m.Name)
+	m.Category = strings.TrimSpace(m.Category)
 	if m.UID == "" {
 		return errs.ErrInvalidModelUID
 	}

@@ -94,8 +94,8 @@ func (h *ModelHandler) Create(ctx *gin.Context, req CreateModelReq) (ginx.Result
 
 	id, err := h.svc.Create(ctx.Request.Context(), model)
 	if err != nil {
-		if err == errs.ErrModelExists {
-			return ErrorResultWithMsg(errs.ParamsError, "model already exists"), nil
+		if result, ok := modelConfigErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -109,8 +109,10 @@ func (h *ModelHandler) GetByUID(ctx *gin.Context) {
 
 	model, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrModelNotFound {
-			ctx.JSON(404, ErrorResult(errs.ModelNotFound))
+		if result, ok := modelConfigErrorResult(err); ok {
+			// GetByUID 不带 body，非 404 的已知拒绝（当前只有未找到）同样用 404，
+			// 与 DELETE /models/:uid 的口径保持一致。
+			ctx.JSON(404, result)
 			return
 		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
@@ -201,8 +203,8 @@ func (h *ModelHandler) Update(ctx *gin.Context, req UpdateModelReq) (ginx.Result
 
 	existing, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrModelNotFound {
-			return ErrorResult(errs.ModelNotFound), nil
+		if result, ok := modelConfigErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -225,6 +227,9 @@ func (h *ModelHandler) Update(ctx *gin.Context, req UpdateModelReq) (ginx.Result
 
 	err = h.svc.Update(ctx.Request.Context(), existing)
 	if err != nil {
+		if result, ok := modelConfigErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
@@ -237,12 +242,13 @@ func (h *ModelHandler) Delete(ctx *gin.Context) {
 
 	err := h.svc.Delete(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrModelNotFound {
-			ctx.JSON(404, ErrorResult(errs.ModelNotFound))
-			return
-		}
-		if err == errs.ErrModelHasInstances {
-			ctx.JSON(400, ErrorResult(errs.ModelHasInstances))
+		if result, ok := modelConfigErrorResult(err); ok {
+			// 未找到 → 404；「仍有实例」是可自助修复的 409。
+			status := 409
+			if result.Code == errs.ModelNotFound.Code {
+				status = 404
+			}
+			ctx.JSON(status, result)
 			return
 		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))

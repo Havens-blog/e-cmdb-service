@@ -1,6 +1,8 @@
 package web
 
 import (
+	"strings"
+
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 
@@ -71,9 +73,10 @@ type ModelGroupWithModelsVO struct {
 
 // Create 创建模型分组
 func (h *ModelGroupHandler) Create(ctx *gin.Context, req CreateModelGroupReq) (ginx.Result, error) {
+	// 裁剪首尾空白：gin 的 binding:"required" 不拦纯空白，实测 " " 能建出一个没有标识的空分组。
 	group := domain.ModelGroup{
-		UID:         req.UID,
-		Name:        req.Name,
+		UID:         strings.TrimSpace(req.UID),
+		Name:        strings.TrimSpace(req.Name),
 		Icon:        req.Icon,
 		SortOrder:   req.SortOrder,
 		Description: req.Description,
@@ -81,8 +84,8 @@ func (h *ModelGroupHandler) Create(ctx *gin.Context, req CreateModelGroupReq) (g
 
 	id, err := h.svc.Create(ctx.Request.Context(), group)
 	if err != nil {
-		if err == errs.ErrModelGroupExists {
-			return ErrorResultWithMsg(errs.ModelGroupExists, "model group already exists"), nil
+		if result, ok := modelConfigErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -179,8 +182,8 @@ func (h *ModelGroupHandler) Update(ctx *gin.Context, req UpdateModelGroupReq) (g
 	uid := ctx.Param("uid")
 
 	group := domain.ModelGroup{
-		UID:         uid,
-		Name:        req.Name,
+		UID:         strings.TrimSpace(uid),
+		Name:        strings.TrimSpace(req.Name),
 		Icon:        req.Icon,
 		SortOrder:   req.SortOrder,
 		Description: req.Description,
@@ -188,8 +191,8 @@ func (h *ModelGroupHandler) Update(ctx *gin.Context, req UpdateModelGroupReq) (g
 
 	err := h.svc.Update(ctx.Request.Context(), group)
 	if err != nil {
-		if err == errs.ErrModelGroupNotFound {
-			return ErrorResult(errs.ModelGroupNotFound), nil
+		if result, ok := modelConfigErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -203,16 +206,16 @@ func (h *ModelGroupHandler) Delete(ctx *gin.Context) {
 
 	err := h.svc.Delete(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrModelGroupNotFound {
-			ctx.JSON(404, ErrorResult(errs.ModelGroupNotFound))
-			return
-		}
-		if err == errs.ErrCannotDeleteBuiltin {
-			ctx.JSON(400, ErrorResult(errs.CannotDeleteBuiltin))
-			return
-		}
-		if err == errs.ErrGroupHasModels {
-			ctx.JSON(400, ErrorResult(errs.GroupHasModels))
+		if result, ok := modelConfigErrorResult(err); ok {
+			// 未找到 → 404；「内置不可删」保持 400；「组内仍有模型」是 409（资源状态冲突）。
+			status := 409
+			switch result.Code {
+			case errs.ModelGroupNotFound.Code:
+				status = 404
+			case errs.CannotDeleteBuiltin.Code:
+				status = 400
+			}
+			ctx.JSON(status, result)
 			return
 		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
