@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/Havens-blog/e-common-go/ginx"
@@ -46,6 +47,54 @@ func (h *AttributeHandler) RegisterRoutes(r *gin.RouterGroup) {
 		groupGroup.PUT("/:id", ginx.WrapBody[UpdateAttributeGroupReq](h.UpdateAttributeGroup))
 		groupGroup.DELETE("/:id", h.DeleteAttributeGroup)
 	}
+}
+
+// attributeErrorResult 把服务层的业务拒绝翻译成用户能读懂的提示。
+//
+// 服务层用 errs.ErrAttributeExists / errs.ErrInvalidAttributeType 等哨兵错误表达
+// 「字段标识重复」「字段类型不支持」这类可自助修复的拒绝，此前 handler 直接把英文原文
+// （"attribute already exists"、"invalid attribute type"）当 msg 返回，前端弹窗里
+// 只有一句「操作失败」——用户既不知道该改哪一项，也无法自助恢复。
+//
+// 这里按「用户看得懂 + 告诉用户怎么改」的原则统一翻译，调用点只负责判断 ok。
+func attributeErrorResult(err error) (ginx.Result, bool) {
+	switch {
+	case errors.Is(err, errs.ErrModelNotFound):
+		return ErrorResultWithMsg(errs.ModelNotFound, "模型不存在或已被删除，请刷新后重试"), true
+	case errors.Is(err, errs.ErrAttributeExists):
+		return ErrorResultWithMsg(errs.AttributeExists,
+			"字段标识已存在：同一模型内字段标识不能重复，请换一个"), true
+	case errors.Is(err, errs.ErrInvalidAttributeUID):
+		return ErrorResultWithMsg(errs.AttributeInvalid, "字段标识不能为空"), true
+	case errors.Is(err, errs.ErrInvalidAttributeName):
+		return ErrorResultWithMsg(errs.AttributeInvalid, "字段名称不能为空"), true
+	case errors.Is(err, errs.ErrInvalidAttributeType):
+		return ErrorResultWithMsg(errs.AttributeInvalid,
+			"字段类型不支持，请从下拉列表中选择"), true
+	case errors.Is(err, errs.ErrAttributeNotFound):
+		return ErrorResultWithMsg(errs.AttributeNotFound,
+			"字段不存在或已被删除，请刷新后重试"), true
+	case errors.Is(err, errs.ErrInvalidAttributeGroup):
+		return ErrorResultWithMsg(errs.ParamsError, "字段分组无效，请重新选择"), true
+	case errors.Is(err, errs.ErrAttributeGroupNotFound):
+		return ErrorResultWithMsg(errs.AttributeNotFound,
+			"字段分组不存在或已被删除，请刷新后重试"), true
+	case errors.Is(err, errs.ErrBuiltinGroupCannotDelete):
+		return ErrorResultWithMsg(errs.CannotDeleteBuiltin,
+			"内置分组不允许删除"), true
+	}
+	return ginx.Result{}, false
+}
+
+// attributeErrorStatus 为业务拒绝挑选合适的 HTTP 状态码。
+//
+// 404 只留给「记录不存在」，其余业务拒绝（标识重复、类型不支持、内置分组不可删）
+// 都是调用方可以自助修复的 400 类问题；500 仅用于真正的服务端故障。
+func attributeErrorStatus(result ginx.Result) int {
+	if result.Code == errs.AttributeNotFound.Code {
+		return 404
+	}
+	return 400
 }
 
 // ========== Request/Response Types ==========
@@ -189,14 +238,8 @@ func (h *AttributeHandler) CreateAttribute(ctx *gin.Context, req CreateAttribute
 
 	id, err := h.svc.CreateAttribute(ctx.Request.Context(), attr)
 	if err != nil {
-		if err == errs.ErrModelNotFound {
-			return ErrorResult(errs.ModelNotFound), nil
-		}
-		if err == errs.ErrAttributeExists {
-			return ErrorResultWithMsg(errs.AttributeExists, "attribute already exists"), nil
-		}
-		if err == errs.ErrInvalidAttributeUID || err == errs.ErrInvalidAttributeName || err == errs.ErrInvalidAttributeType {
-			return ErrorResultWithMsg(errs.AttributeInvalid, err.Error()), nil
+		if result, ok := attributeErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -209,7 +252,7 @@ func (h *AttributeHandler) GetAttribute(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "invalid id"))
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "字段 ID 非法"))
 		return
 	}
 
@@ -328,12 +371,13 @@ func (h *AttributeHandler) UpdateAttribute(ctx *gin.Context, req UpdateAttribute
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return ErrorResultWithMsg(errs.ParamsError, "invalid id"), nil
+		return ErrorResultWithMsg(errs.ParamsError, "字段 ID 非法"), nil
 	}
 
 	existing, err := h.svc.GetAttribute(ctx.Request.Context(), id)
 	if err != nil {
-		return ErrorResult(errs.AttributeNotFound), nil
+		return ErrorResultWithMsg(errs.AttributeNotFound,
+			"字段不存在或已被删除，请刷新后重试"), nil
 	}
 
 	// 更新字段
@@ -391,6 +435,9 @@ func (h *AttributeHandler) UpdateAttribute(ctx *gin.Context, req UpdateAttribute
 
 	err = h.svc.UpdateAttribute(ctx.Request.Context(), existing)
 	if err != nil {
+		if result, ok := attributeErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
@@ -402,12 +449,18 @@ func (h *AttributeHandler) DeleteAttribute(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "invalid id"))
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "字段 ID 非法"))
 		return
 	}
 
 	err = h.svc.DeleteAttribute(ctx.Request.Context(), id)
 	if err != nil {
+		if result, ok := attributeErrorResult(err); ok {
+			// 业务拒绝不是服务端故障：字段不存在回 404，其余（含被引用等）回 400，
+			// 与列表/创建接口的语义保持一致，避免前端把可自助修复的问题当 5xx 重试。
+			ctx.JSON(attributeErrorStatus(result), result)
+			return
+		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}
@@ -431,11 +484,8 @@ func (h *AttributeHandler) CreateAttributeGroup(ctx *gin.Context, req CreateAttr
 
 	id, err := h.svc.CreateAttributeGroup(ctx.Request.Context(), group)
 	if err != nil {
-		if err == errs.ErrModelNotFound {
-			return ErrorResult(errs.ModelNotFound), nil
-		}
-		if err == errs.ErrInvalidAttributeGroup {
-			return ErrorResultWithMsg(errs.ParamsError, "invalid attribute group"), nil
+		if result, ok := attributeErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
@@ -448,13 +498,14 @@ func (h *AttributeHandler) GetAttributeGroup(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "invalid id"))
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "字段分组 ID 非法"))
 		return
 	}
 
 	group, err := h.svc.GetAttributeGroup(ctx.Request.Context(), id)
 	if err != nil || group.ID == 0 {
-		ctx.JSON(404, ErrorResultWithMsg(errs.AttributeNotFound, "attribute group not found"))
+		ctx.JSON(404, ErrorResultWithMsg(errs.AttributeNotFound,
+			"字段分组不存在或已被删除，请刷新后重试"))
 		return
 	}
 
@@ -484,12 +535,13 @@ func (h *AttributeHandler) UpdateAttributeGroup(ctx *gin.Context, req UpdateAttr
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		return ErrorResultWithMsg(errs.ParamsError, "invalid id"), nil
+		return ErrorResultWithMsg(errs.ParamsError, "字段分组 ID 非法"), nil
 	}
 
 	existing, err := h.svc.GetAttributeGroup(ctx.Request.Context(), id)
 	if err != nil || existing.ID == 0 {
-		return ErrorResultWithMsg(errs.AttributeNotFound, "attribute group not found"), nil
+		return ErrorResultWithMsg(errs.AttributeNotFound,
+			"字段分组不存在或已被删除，请刷新后重试"), nil
 	}
 
 	if req.Name != "" {
@@ -504,6 +556,9 @@ func (h *AttributeHandler) UpdateAttributeGroup(ctx *gin.Context, req UpdateAttr
 
 	err = h.svc.UpdateAttributeGroup(ctx.Request.Context(), existing)
 	if err != nil {
+		if result, ok := attributeErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
@@ -515,18 +570,19 @@ func (h *AttributeHandler) DeleteAttributeGroup(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "invalid id"))
+		ctx.JSON(400, ErrorResultWithMsg(errs.ParamsError, "字段分组 ID 非法"))
 		return
 	}
 
 	err = h.svc.DeleteAttributeGroup(ctx.Request.Context(), id)
 	if err != nil {
-		if err == errs.ErrAttributeGroupNotFound {
-			ctx.JSON(404, ErrorResultWithMsg(errs.AttributeNotFound, "attribute group not found"))
+		switch {
+		case errors.Is(err, errs.ErrAttributeGroupNotFound):
+			ctx.JSON(404, ErrorResultWithMsg(errs.AttributeNotFound,
+				"字段分组不存在或已被删除，请刷新后重试"))
 			return
-		}
-		if err == errs.ErrBuiltinGroupCannotDelete {
-			ctx.JSON(400, ErrorResultWithMsg(errs.CannotDeleteBuiltin, "builtin group cannot be deleted"))
+		case errors.Is(err, errs.ErrBuiltinGroupCannotDelete):
+			ctx.JSON(400, ErrorResultWithMsg(errs.CannotDeleteBuiltin, "内置分组不允许删除"))
 			return
 		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
