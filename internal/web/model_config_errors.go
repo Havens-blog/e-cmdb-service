@@ -35,6 +35,12 @@ func modelConfigErrorResult(err error) (ginx.Result, bool) {
 		return ErrorResultWithMsg(errs.ModelInvalid, "模型名称不能为空"), true
 	case errors.Is(err, errs.ErrInvalidModelCategory):
 		return ErrorResultWithMsg(errs.ModelInvalid, "模型分类不能为空"), true
+	case errors.Is(err, errs.ErrInvalidModelGroupUID):
+		return ErrorResultWithMsg(errs.ModelGroupInvalid, "分组标识（UID）不能为空"), true
+	case errors.Is(err, errs.ErrInvalidModelGroupName):
+		return ErrorResultWithMsg(errs.ModelGroupInvalid, "分组名称不能为空"), true
+	case errors.Is(err, errs.ErrModelGroupInvalid):
+		return ErrorResultWithMsg(errs.ModelGroupInvalid, "分组信息无效，请检查后重试"), true
 	case errors.Is(err, errs.ErrModelGroupNotFound):
 		return ErrorResultWithMsg(errs.ModelGroupNotFound, "模型分组不存在或已被删除，请刷新后重试"), true
 	case errors.Is(err, errs.ErrModelGroupExists):

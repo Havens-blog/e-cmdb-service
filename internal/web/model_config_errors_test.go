@@ -29,6 +29,9 @@ func TestModelConfigErrorResult(t *testing.T) {
 		{"分组 UID 重复", errs.ErrModelGroupExists, errs.ModelGroupExists.Code, "分组标识已存在"},
 		{"分组仍有模型", errs.ErrGroupHasModels, errs.GroupHasModels.Code, "该分组下仍有模型"},
 		{"内置分组不可删", errs.ErrCannotDeleteBuiltin, errs.CannotDeleteBuiltin.Code, "内置分组不允许删除"},
+		{"分组 UID 为空", errs.ErrInvalidModelGroupUID, errs.ModelGroupInvalid.Code, "分组标识（UID）不能为空"},
+		{"分组名称为空", errs.ErrInvalidModelGroupName, errs.ModelGroupInvalid.Code, "分组名称不能为空"},
+		{"分组信息无效", errs.ErrModelGroupInvalid, errs.ModelGroupInvalid.Code, "分组信息无效"},
 	}
 
 	for _, tc := range cases {
