@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -88,9 +89,18 @@ func (s *modelService) List(ctx context.Context, filter domain.ModelFilter) ([]d
 }
 
 func (s *modelService) Update(ctx context.Context, model domain.Model) error {
-	// 与 Create 同口径：裁剪并校验必填项，否则 PUT 可以用单个空格把名称改成「空」。
-	if err := model.Validate(); err != nil {
-		return err
+	// 只裁剪与校验 Update 实际可变更的字段（评审 #2）：
+	// UpdateModelReq 不含 category，且 ecam_model 数据自 e-cam-service 迁移而来，
+	// 历史行可能存在空 category；若这里沿用 Model.Validate（要求 Category 非空），
+	// 这些模型会再也改不了任何字段，而接口又没有补写 category 的手段。
+	// 名称仍必须非空，否则 PUT 可以用单个空格把名称改成「空」。
+	model.UID = strings.TrimSpace(model.UID)
+	model.Name = strings.TrimSpace(model.Name)
+	model.Icon = strings.TrimSpace(model.Icon)
+	model.Description = strings.TrimSpace(model.Description)
+	model.Category = strings.TrimSpace(model.Category)
+	if model.Name == "" {
+		return errs.ErrInvalidModelName
 	}
 
 	exists, err := s.repo.Exists(ctx, model.UID)

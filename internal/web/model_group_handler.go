@@ -46,10 +46,12 @@ type CreateModelGroupReq struct {
 
 // UpdateModelGroupReq 更新模型分组请求
 type UpdateModelGroupReq struct {
-	Name        string `json:"name"`
-	Icon        string `json:"icon"`
-	SortOrder   int    `json:"sort_order"`
-	Description string `json:"description"`
+	// Name 用指针区分「未传」与「显式传空」：未传保留旧值（部分更新），
+	// 显式传空/纯空白则仍走服务层校验返回 400，而不是被静默忽略（评审 #1 后续补验）。
+	Name        *string `json:"name"`
+	Icon        string  `json:"icon"`
+	SortOrder   int     `json:"sort_order"`
+	Description string  `json:"description"`
 }
 
 // ModelGroupVO 模型分组视图对象
@@ -181,15 +183,32 @@ func (h *ModelGroupHandler) GetByUID(ctx *gin.Context) {
 func (h *ModelGroupHandler) Update(ctx *gin.Context, req UpdateModelGroupReq) (ginx.Result, error) {
 	uid := strings.TrimSpace(ctx.Param("uid"))
 
-	group := domain.ModelGroup{
-		UID:         strings.TrimSpace(uid),
-		Name:        strings.TrimSpace(req.Name),
-		Icon:        req.Icon,
-		SortOrder:   req.SortOrder,
-		Description: req.Description,
+	// 与模型更新同口径：先取回旧值再按非空字段合并（评审 #1）。
+	// UpdateModelGroupReq 的所有字段在 OpenAPI 里都是可选的，
+	// 若整条替换，只传 {"description":...} 的部分更新会把分组名冲成空串
+	// （服务层现在会拒绝空名称，于是这类合法请求变成 400）。
+	existing, err := h.svc.GetByUID(ctx.Request.Context(), uid)
+	if err != nil {
+		if result, ok := modelConfigErrorResult(err); ok {
+			return result, nil
+		}
+		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
-	err := h.svc.Update(ctx.Request.Context(), group)
+	if req.Name != nil {
+		existing.Name = *req.Name
+	}
+	if req.Icon != "" {
+		existing.Icon = req.Icon
+	}
+	if req.SortOrder != 0 {
+		existing.SortOrder = req.SortOrder
+	}
+	if req.Description != "" {
+		existing.Description = req.Description
+	}
+
+	err = h.svc.Update(ctx.Request.Context(), existing)
 	if err != nil {
 		if result, ok := modelConfigErrorResult(err); ok {
 			return result, nil
