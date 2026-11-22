@@ -597,7 +597,6 @@
           }
         },
         "required": [
-          "event_types",
           "name",
           "target_url"
         ],
