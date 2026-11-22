@@ -198,6 +198,8 @@ func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
 			"目标模型不存在或已被删除，请刷新模型列表后重新选择"), true
 	case errors.Is(err, domain.ErrInvalidRelationTypeUID):
 		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型标识（UID）不能为空"), true
+	case errors.Is(err, domain.ErrInvalidRelationName):
+		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型名称不能为空"), true
 	case errors.Is(err, domain.ErrInvalidRelationModel):
 		return ErrorResultWithMsg(errs.RelationInvalid, "源模型与目标模型都必须选择"), true
 	}

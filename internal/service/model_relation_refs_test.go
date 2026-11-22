@@ -214,6 +214,15 @@ func TestCreateRelationType_RejectsBlankAfterTrim(t *testing.T) {
 	if !errors.Is(err, domain.ErrInvalidRelationModel) {
 		t.Fatalf("期望 ErrInvalidRelationModel，实际 %v", err)
 	}
+
+	// Name 同样要在裁剪后判空：binding:"required" 放行纯空格，
+	// 否则会落库成「名字为空白」的关系类型（与本次要修的脏数据同类）。
+	rel = validRelation()
+	rel.Name = "   "
+	_, err = svc.Create(context.Background(), rel)
+	if !errors.Is(err, domain.ErrInvalidRelationName) {
+		t.Fatalf("期望 ErrInvalidRelationName，实际 %v", err)
+	}
 }
 
 // TestCreateRelationType_DuplicateUIDStillRejected 新校验不得掩盖原有重复检查。

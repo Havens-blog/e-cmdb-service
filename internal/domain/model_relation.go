@@ -48,9 +48,16 @@ type ModelRelationTypeFilter struct {
 }
 
 // Validate 验证模型关系类型
+//
+// Name 也要判：HTTP 层的 binding:"required" 只拒空串，" " 能通过，
+// 而调用方（service.Create/Update）会先 TrimSpace —— 裁剪后变成 "" 若不再
+// 校验就会落库成无名关系类型，列表和拓扑边标签都会显示空白。
 func (m *ModelRelationType) Validate() error {
 	if m.UID == "" {
 		return ErrInvalidRelationTypeUID
+	}
+	if m.Name == "" {
+		return ErrInvalidRelationName
 	}
 	if m.SourceModelUID == "" || m.TargetModelUID == "" {
 		return ErrInvalidRelationModel
@@ -60,6 +67,9 @@ func (m *ModelRelationType) Validate() error {
 
 // ErrInvalidRelationTypeUID 无效的关系类型UID
 var ErrInvalidRelationTypeUID = errors.New("relation type uid cannot be empty")
+
+// ErrInvalidRelationName 无效的关系类型名称
+var ErrInvalidRelationName = errors.New("relation type name cannot be empty")
 
 // ErrInvalidRelationModel 无效的关系模型
 var ErrInvalidRelationModel = errors.New("source and target model uid cannot be empty")

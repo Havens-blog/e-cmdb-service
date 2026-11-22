@@ -44,6 +44,12 @@ func TestModelRelationTypeErrorResult(t *testing.T) {
 			wantMsg:  "关系类型标识",
 		},
 		{
+			name:     "名称为空",
+			err:      domain.ErrInvalidRelationName,
+			wantCode: errs.RelationInvalid.Code,
+			wantMsg:  "关系类型名称不能为空",
+		},
+		{
 			name:     "模型为空",
 			err:      domain.ErrInvalidRelationModel,
 			wantCode: errs.RelationInvalid.Code,
