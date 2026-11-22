@@ -55,6 +55,12 @@ func TestModelRelationTypeErrorResult(t *testing.T) {
 			wantCode: errs.RelationInvalid.Code,
 			wantMsg:  "源模型与目标模型都必须选择",
 		},
+		{
+			name:     "关系类型不存在映射 404003 中文",
+			err:      errs.ErrRelationNotFound,
+			wantCode: errs.RelationNotFound.Code,
+			wantMsg:  "关系类型不存在或已被删除",
+		},
 	}
 
 	for _, tc := range cases {

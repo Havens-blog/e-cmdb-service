@@ -202,6 +202,11 @@ func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
 		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型名称不能为空"), true
 	case errors.Is(err, domain.ErrInvalidRelationModel):
 		return ErrorResultWithMsg(errs.RelationInvalid, "源模型与目标模型都必须选择"), true
+	case errors.Is(err, errs.ErrRelationNotFound):
+		// service.Update/Delete 在 Exists=false（含 GET 与 PUT 之间被并发删除的窗口）时返回该哨兵；
+		// 不映射会落到上层 errs.SystemError(500001) + 英文原文，正是本 helper 要消除的折叠。
+		return ErrorResultWithMsg(errs.RelationNotFound,
+			"关系类型不存在或已被删除，请刷新后重试"), true
 	}
 	return ginx.Result{}, false
 }
