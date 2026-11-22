@@ -88,7 +88,7 @@ func (f *refRelationRepo) FindByModels(_ context.Context, _, _ string) ([]domain
 }
 
 func newRefService(modelRepo *refModelRepo, relRepo *refRelationRepo) ModelRelationTypeService {
-	return NewModelRelationTypeService(relRepo, modelRepo)
+	return NewModelRelationTypeService(relRepo, nil, modelRepo)
 }
 
 func validRelation() domain.ModelRelationType {
@@ -250,7 +250,7 @@ func TestCreateRelationType_DuplicateUIDStillRejected(t *testing.T) {
 // TestCreateRelationType_NilModelRepoSkipsCheck 保留旧装配路径（未注入模型仓储时不校验）。
 func TestCreateRelationType_NilModelRepoSkipsCheck(t *testing.T) {
 	rels := &refRelationRepo{}
-	svc := NewModelRelationTypeService(rels, nil)
+	svc := NewModelRelationTypeService(rels, nil, nil)
 
 	rel := validRelation()
 	rel.SourceModelUID = "zz_no_such"

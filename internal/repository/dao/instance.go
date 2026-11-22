@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"time"
 
@@ -195,26 +196,74 @@ func (d *instanceDAO) CreateBatch(ctx context.Context, instances []Instance) (in
 	}
 
 	now := time.Now().UnixMilli()
-	docs := make([]interface{}, len(instances))
+	inserted := int64(0)
 
-	for i := range instances {
-		if instances[i].ID == 0 {
-			instances[i].ID = d.db.GetIdGenerator(InstanceCollection)
+	// 显式分块插入：驱动的 retryable writes 会把超大批量切成多个子批次下发，此时
+	// BulkWriteException.WriteErrors[].Index 只相对**失败的子批次**，用它推断「已写入
+	// 多少条」会严重低估。每块远小于驱动的切分阈值，块内下标就能直接当已写入条数用。
+	for start := 0; start < len(instances); start += batchInsertChunkSize {
+		end := start + batchInsertChunkSize
+		if end > len(instances) {
+			end = len(instances)
 		}
-		instances[i].Ctime = now
-		instances[i].Utime = now
-		docs[i] = instances[i]
+		docs := make([]interface{}, 0, end-start)
+		for i := start; i < end; i++ {
+			if instances[i].ID == 0 {
+				instances[i].ID = d.db.GetIdGenerator(InstanceCollection)
+			}
+			instances[i].Ctime = now
+			instances[i].Utime = now
+			docs = append(docs, instances[i])
+		}
+
+		result, err := d.db.Collection(InstanceCollection).InsertMany(ctx, docs)
+		if err != nil {
+			n, ok := insertedInFailedInsert(err, len(docs))
+			if ok {
+				inserted += n
+			}
+			return inserted, err
+		}
+		inserted += int64(len(result.InsertedIDs))
 	}
 
-	result, err := d.db.Collection(InstanceCollection).InsertMany(ctx, docs)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(len(result.InsertedIDs)), nil
+	return inserted, nil
 }
 
-// Update 更新实例
+// batchInsertChunkSize 是单次 InsertMany 的文档数上限。
+//
+// 取值远低于驱动切分阈值（10 万条 / 约 48MB），保证「块内写错误下标」就等于「本块
+// 已写入条数」，不依赖驱动是否把请求拆成多个子批次。
+const batchInsertChunkSize = 200
+
+// insertedInFailedInsert 从有序 InsertMany 的错误里推断**本次调用已写入条数**。
+//
+// 三种情况：
+//   - 写错误（WriteErrors 非空）：有序插入下失败点之前都已写入，下标即条数；
+//   - 仅写关注错误（WriteConcernError，如 wtimeout）：文档已全部应用到主节点，只是
+//     确认不足，按整块已写入处理；
+//   - 其它错误（网络中断、非批量错误）：无法判断，返回 ok=false，调用方自行决定。
+//
+// 返回 ok=false 表示「无法确定」，此时调用方不应补审计（宁缺勿错）。
+func insertedInFailedInsert(err error, chunkLen int) (int64, bool) {
+	var bulkErr mongo.BulkWriteException
+	if !errors.As(err, &bulkErr) {
+		return 0, false
+	}
+	if len(bulkErr.WriteErrors) > 0 {
+		idx := bulkErr.WriteErrors[0].Index
+		// 下标 0 基，合法失败点在 [0, chunkLen-1]；等于 chunkLen 属异常值，按无法确定处理。
+		if idx < 0 || idx >= chunkLen {
+			return 0, false
+		}
+		return int64(idx), true
+	}
+	if bulkErr.WriteConcernError != nil {
+		return int64(chunkLen), true
+	}
+	return 0, false
+}
+
 func (d *instanceDAO) Update(ctx context.Context, tenantID int64, instance Instance) error {
 	now := time.Now().UnixMilli()
 
@@ -360,7 +409,14 @@ type InstanceFacets struct {
 	Providers []FacetBucket
 	Regions   []FacetBucket
 	Sources   []FacetBucket
-	Total     int64
+	// Statuses 状态分布（iter246）。
+	//
+	// 实测（2026-11-19，tenant 3）状态值是**小写且按模型不同**的：
+	// running 2,504 / available 4,166 / in_use 5,043 / in-use 348 / active 989 /
+	// attached 1,838 / stopped 39 / pending 13 / inactive 12 / creating 2 / deleting 1，
+	// 其余为空。硬编码大写枚举（Running/Stopped）会筛出 0 条，所以可选值只能由服务端聚合给出。
+	Statuses []FacetBucket
+	Total    int64
 }
 
 // facetMaxValues 每个维度最多返回的取值个数。
@@ -390,6 +446,7 @@ func buildFacetPipeline(tenantID int64, maxValues int) mongo.Pipeline {
 			{Key: "providers", Value: bucket("attributes.provider")},
 			{Key: "regions", Value: bucket("attributes.region")},
 			{Key: "sources", Value: bucket("source")},
+			{Key: "statuses", Value: bucket("attributes.status")},
 			{Key: "total", Value: bson.A{bson.D{{Key: "$count", Value: "count"}}}},
 		}}},
 	}
@@ -407,6 +464,7 @@ func (d *instanceDAO) Facets(ctx context.Context, tenantID int64) (*InstanceFace
 		Providers []FacetBucket `bson:"providers"`
 		Regions   []FacetBucket `bson:"regions"`
 		Sources   []FacetBucket `bson:"sources"`
+		Statuses  []FacetBucket `bson:"statuses"`
 		Total     []struct {
 			Count int64 `bson:"count"`
 		} `bson:"total"`
@@ -420,6 +478,7 @@ func (d *instanceDAO) Facets(ctx context.Context, tenantID int64) (*InstanceFace
 		out.Providers = rows[0].Providers
 		out.Regions = rows[0].Regions
 		out.Sources = rows[0].Sources
+		out.Statuses = rows[0].Statuses
 		if len(rows[0].Total) > 0 {
 			out.Total = rows[0].Total[0].Count
 		}
@@ -571,6 +630,7 @@ func aggregateStatsByIDsMatch(ids []int64, tenantID int64) bson.M {
 //     已绑定资产全部被当作「未绑定」（实测 unbound count = 实例总数 21,046）
 //  2. 绑定表里 resource_type 同时存在 `instance`（规则绑定）与 `asset`（手工绑定），
 //     原实现只匹配 `instance`，即使集合改对也会漏排手工绑定
+//
 // unboundPipeline 构造「未绑定实例」聚合管道。
 //
 // **性能约束（2026-11-19 实测）**：$lookup 必须用 localField/foreignField 的简单形态。

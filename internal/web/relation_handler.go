@@ -307,6 +307,13 @@ func (h *RelationHandler) DeleteModelRelation(ctx *gin.Context) {
 			ctx.JSON(404, ErrorResult(errs.RelationNotFound))
 			return
 		}
+		// 仍被资产关系引用：400 + 中文原因（含引用条数），
+		// 不能落进 500 —— 这是可预期的业务拒绝，不是服务故障。
+		var inUse *service.RelationTypeInUseError
+		if errors.As(err, &inUse) {
+			ctx.JSON(400, ErrorResultWithMsg(errs.RelationTypeInUse, inUse.Error()))
+			return
+		}
 		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}

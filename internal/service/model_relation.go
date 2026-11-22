@@ -22,20 +22,29 @@ type ModelRelationTypeService interface {
 }
 
 type modelRelationTypeService struct {
-	repo      repository.ModelRelationTypeRepository
+	repo repository.ModelRelationTypeRepository
+	// instRelRepo 用于删除前统计仍在使用该类型的资产关系。
+	// 模型关系类型是与租户无关的元数据，而资产关系是按租户存的，
+	// 因此统计必须跨租户（InstanceRelationFilter.TenantID=0 即不加租户谓词）。
+	instRelRepo repository.InstanceRelationRepository
+	// modelRepo 只用于 Create/Update 时校验 source/target 模型确实存在。
 	modelRepo repository.ModelRepository
 	logger    *elog.Component
 }
 
 // NewModelRelationTypeService 创建模型关系类型服务。
 //
-// modelRepo 只用于 Create 时校验 source/target 模型确实存在；传 nil 时跳过该校验
-// （保留给尚未装配模型仓储的测试与旧调用点，生产装配见 internal/module.go）。
-func NewModelRelationTypeService(repo repository.ModelRelationTypeRepository, modelRepo repository.ModelRepository) ModelRelationTypeService {
+// instRelRepo 用于删除保护：仍被资产关系引用的类型不允许删除，
+// 否则会留下 relation_type_uid 指向已删类型的孤儿关系（实测 2026-11-19：
+// 删除在用类型返回 code=0，关系仍在，但前端已拿不到中文类型名）；传 nil 跳过。
+// modelRepo 用于 Create/Update 时校验声明的源/目标模型存在，防止再造悬空关系类型；
+// 传 nil 时跳过该校验（保留给尚未装配模型仓储的测试与旧调用点）。
+func NewModelRelationTypeService(repo repository.ModelRelationTypeRepository, instRelRepo repository.InstanceRelationRepository, modelRepo repository.ModelRepository) ModelRelationTypeService {
 	return &modelRelationTypeService{
-		repo:      repo,
-		modelRepo: modelRepo,
-		logger:    elog.DefaultLogger,
+		repo:        repo,
+		instRelRepo: instRelRepo,
+		modelRepo:   modelRepo,
+		logger:      elog.DefaultLogger,
 	}
 }
 
@@ -150,7 +159,40 @@ func (s *modelRelationTypeService) Delete(ctx context.Context, uid string) error
 		return errs.ErrRelationNotFound
 	}
 
+	// 仍被资产关系引用时拒绝删除。
+	//
+	// 与 modelService.Delete（模型下有实例则 errs.ErrModelHasInstances）同一套思路：
+	// 元数据先删、台账后留会造成用户无法解释的孤儿数据——资产关系还在列表里，
+	// 但类型已不在类型清单中，页面只能显示英文 uid，拓扑也失去方向语义。
+	if s.instRelRepo != nil {
+		count, err := s.instRelRepo.Count(ctx, domain.InstanceRelationFilter{RelationTypeUID: uid})
+		if err != nil {
+			return fmt.Errorf("failed to count instance relations of type %s: %w", uid, err)
+		}
+		if count > 0 {
+			return &RelationTypeInUseError{RelationTypeUID: uid, Count: count}
+		}
+	}
+
 	return s.repo.Delete(ctx, uid)
+}
+
+// RelationTypeInUseError 表示模型关系类型仍被资产关系引用，不能删除。
+//
+// 携带引用条数，是因为「有 N 条」与「有 1 条」对用户意味着完全不同的清理工作量；
+// 只回一句「正在使用」会让用户去猜到底要不要先清数据。
+type RelationTypeInUseError struct {
+	RelationTypeUID string
+	Count           int64
+}
+
+func (e *RelationTypeInUseError) Error() string {
+	return fmt.Sprintf("该关系类型正在被 %d 条资产关系使用，请先删除这些资产关系后再删除类型", e.Count)
+}
+
+// Is 让 errors.Is(err, errs.ErrRelationTypeInUse) 成立，便于上层统一判定。
+func (e *RelationTypeInUseError) Is(target error) bool {
+	return target == errs.ErrRelationTypeInUse
 }
 
 func (s *modelRelationTypeService) FindByModels(ctx context.Context, sourceUID, targetUID string) ([]domain.ModelRelationType, error) {

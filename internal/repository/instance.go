@@ -156,6 +156,7 @@ func (r *instanceRepository) Facets(ctx context.Context, tenantID int64) (*domai
 		Providers: toDomain(facets.Providers),
 		Regions:   toDomain(facets.Regions),
 		Sources:   toDomain(facets.Sources),
+		Statuses:  toDomain(facets.Statuses),
 		Total:     facets.Total,
 	}, nil
 }

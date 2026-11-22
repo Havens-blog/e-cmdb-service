@@ -57,10 +57,11 @@ func (h *QualityHandler) Issues(ctx *gin.Context) (ginx.Result, error) {
 		return res, nil
 	}
 	tenantID := middleware.GetTenantID(ctx)
-	typ := ctx.Query("type")
 	// 取值非法必须报错：旧实现把未知 type 当成「没有该类问题」，
 	// `?type=zzz` 返回 {"total":0}，与「真的没有问题」无法区分。
-	if enumErr := validateEnumParam(typ, "type", qualityIssueTypes); enumErr != "" {
+	// 用归一化后的返回值，不能把原始串透传给下游（`?type=%20orphan_instance` 会静默空集）。
+	typ, enumErr := validateEnumParam(ctx.Query("type"), "type", qualityIssueTypes)
+	if enumErr != "" {
 		return ErrorResultWithMsg(errs.ParamsError, enumErr+"；字段级问题请改用 /api/v1/cmdb/quality/field-issues"), nil
 	}
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
@@ -98,8 +99,8 @@ func (h *QualityHandler) FieldIssues(ctx *gin.Context) (ginx.Result, error) {
 	}
 	tenantID := middleware.GetTenantID(ctx)
 	modelUID := ctx.Query("model_uid")
-	issueType := ctx.Query("issue_type")
-	if enumErr := validateEnumParam(issueType, "issue_type", qualityFieldIssueTypes); enumErr != "" {
+	issueType, enumErr := validateEnumParam(ctx.Query("issue_type"), "issue_type", qualityFieldIssueTypes)
+	if enumErr != "" {
 		return ErrorResultWithMsg(errs.ParamsError, enumErr), nil
 	}
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))
@@ -121,9 +122,9 @@ func (h *QualityHandler) SyncIssues(ctx *gin.Context) (ginx.Result, error) {
 	}
 	tenantID := middleware.GetTenantID(ctx)
 	modelUID := ctx.Query("model_uid")
-	issueType := ctx.Query("issue_type")
 	assetID := ctx.Query("asset_id")
-	if enumErr := validateEnumParam(issueType, "issue_type", syncIssueTypes); enumErr != "" {
+	issueType, enumErr := validateEnumParam(ctx.Query("issue_type"), "issue_type", syncIssueTypes)
+	if enumErr != "" {
 		return ErrorResultWithMsg(errs.ParamsError, enumErr), nil
 	}
 	offset, limit, pagingErr := resolvePaging(ctx.Query("offset"), ctx.Query("limit"))

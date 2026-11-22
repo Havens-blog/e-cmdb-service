@@ -21,6 +21,9 @@ var (
 	ModelExists       = ErrorCode{Code: 409001, Msg: "model already exists"}
 	ModelInvalid      = ErrorCode{Code: 400002, Msg: "model invalid"}
 	ModelHasInstances = ErrorCode{Code: 400009, Msg: "model has instances, cannot delete"}
+	// RelationTypeInUse：模型关系类型仍被资产关系引用。
+	// 与 ModelHasInstances 同族（400 段），前端按 code 判 4xx 即可提示。
+	RelationTypeInUse = ErrorCode{Code: 400010, Msg: "relation type is in use by instance relations, cannot delete"}
 )
 
 // 实例相关错误码
@@ -81,6 +84,8 @@ var (
 	ErrModelNotFound        = errors.New("model not found")
 	ErrModelExists          = errors.New("model already exists")
 	ErrModelHasInstances    = errors.New("model has instances, cannot delete")
+	// ErrRelationTypeInUse 由 service.RelationTypeInUseError 通过 Is 方法匹配。
+	ErrRelationTypeInUse = errors.New("relation type is in use by instance relations")
 
 	ErrInvalidAssetID    = errors.New("asset id cannot be empty")
 	ErrInvalidTenantID   = errors.New("tenant id cannot be empty")
@@ -118,8 +123,13 @@ var (
 	ErrAPITokenNotFound   = errors.New("api token not found")
 	ErrWebhookNotFound    = errors.New("webhook not found")
 	ErrInvalidTokenName   = errors.New("token name cannot be empty")
+	ErrTokenNameTooLong   = errors.New("token name is too long")
+	ErrInvalidTokenTTL    = errors.New("token ttl_days cannot be negative")
+	ErrTokenTTLTooLarge   = errors.New("token ttl_days exceeds the maximum")
 	ErrInvalidWebhookName = errors.New("webhook name cannot be empty")
+	ErrWebhookNameTooLong = errors.New("webhook name is too long")
 	ErrInvalidTargetURL   = errors.New("webhook target_url cannot be empty")
+	ErrTargetURLTooLong   = errors.New("webhook target_url is too long")
 	ErrInvalidEventType   = errors.New("invalid webhook event type")
 	ErrInvalidStatus      = errors.New("invalid status")
 )

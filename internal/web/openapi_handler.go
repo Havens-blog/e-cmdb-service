@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/Havens-blog/e-common-go/ginx"
@@ -40,17 +41,64 @@ func (h *OpenAPIHandler) RegisterRoutes(r *gin.RouterGroup) {
 	}
 }
 
+// openAPIErrorMessage 把 service 层的哨兵错误翻译成给用户看的中文原因。
+//
+// 之前非法输入经 gin 绑定直接返回空体 400，前端只能弹「创建 Token 失败」，
+// 用户不知道是名字为空、名字太长还是有效期填错；这里按错误逐条给原因，
+// 未知错误保留原文，避免掩盖真实故障。
+func openAPIErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, errs.ErrInvalidTokenName):
+		return "令牌名称不能为空"
+	case errors.Is(err, errs.ErrTokenNameTooLong):
+		return "令牌名称不能超过 64 个字符"
+	case errors.Is(err, errs.ErrInvalidTokenTTL):
+		return "有效期天数不能为负数（填 0 表示永不过期）"
+	case errors.Is(err, errs.ErrTokenTTLTooLarge):
+		return "有效期天数不能超过 3650 天（填 0 表示永不过期）"
+	case errors.Is(err, errs.ErrInvalidWebhookName):
+		return "Webhook 名称不能为空"
+	case errors.Is(err, errs.ErrWebhookNameTooLong):
+		return "Webhook 名称不能超过 64 个字符"
+	case errors.Is(err, errs.ErrInvalidTargetURL):
+		return "回调地址不能为空"
+	case errors.Is(err, errs.ErrTargetURLTooLong):
+		return "回调地址不能超过 2048 个字符"
+	case errors.Is(err, errs.ErrInvalidEventType):
+		return "事件类型无效，请至少选择一个受支持的事件类型"
+	case errors.Is(err, errs.ErrInvalidStatus):
+		return "状态无效，只支持 active 或 disabled"
+	}
+	return err.Error()
+}
+
 // CreateTokenReq 创建 API Token 请求。
+//
+// binding:"required" 只拦「字段整个缺失/空串」，用于保住 OpenAPI 规范里的
+// required 声明；语义校验（trim 后判空、长度上限、负数有效期）由 service
+// 负责，因为 gin 的绑定失败只会回一个空体 400，前端拿不到哪个字段错了。
+// service 返回的哨兵错误经 openAPIErrorMessage 翻译成中文原因随统一信封返回。
 type CreateTokenReq struct {
 	Name    string   `json:"name" binding:"required"`
 	Scopes  []string `json:"scopes"`
 	TTLDays int      `json:"ttl_days"`
 }
 
-// CreateWebhookReq 创建 Webhook 请求。
+// CreateWebhookReq 创建 Webhook 请求；分层同 CreateTokenReq。
+//
+// EventTypes 刻意不加 binding:"required"：gin 对 slice 的 required 是
+// 「非 nil 且 len > 0」，空数组会在绑定阶段被拒成空体 400，恰好是本 PR 要
+// 修掉的「前端拿不到原因」场景。是否至少选一个事件类型由
+// service.validateEventTypes 判断，错误经 openAPIErrorMessage 翻成中文原因。
+//
+// 因此该字段在 OpenAPI 规范里变为**可选**（cmd/openapi 只按 binding:"required"
+// 判定请求类型的必填，见 cmd/openapi/main.go 的 required 分支），docs/openapi.json
+// 的 CreateWebhookReq.required 已同步去掉 event_types；但「至少一个事件类型」仍是
+// 硬约束，拒绝位置从绑定阶段下移到 service 层。契约文档与实现语义保持一致：
+// 字段可选 ≠ 可以传空数组。
 type CreateWebhookReq struct {
 	Name       string   `json:"name" binding:"required"`
-	EventTypes []string `json:"event_types" binding:"required"`
+	EventTypes []string `json:"event_types"`
 	TargetURL  string   `json:"target_url" binding:"required"`
 	Secret     string   `json:"secret"`
 }
@@ -111,7 +159,7 @@ type WebhookListResp struct {
 func (h *OpenAPIHandler) CreateToken(ctx *gin.Context, req CreateTokenReq) (ginx.Result, error) {
 	token, plain, err := h.svc.CreateToken(ctx.Request.Context(), middleware.GetTenantID(ctx), req.Name, req.Scopes, req.TTLDays)
 	if err != nil {
-		return ErrorResultWithMsg(errs.ParamsError, err.Error()), nil
+		return ErrorResultWithMsg(errs.ParamsError, openAPIErrorMessage(err)), nil
 	}
 
 	return Result(CreatedTokenVO{
@@ -175,7 +223,7 @@ func (h *OpenAPIHandler) RevokeToken(ctx *gin.Context) {
 func (h *OpenAPIHandler) CreateWebhook(ctx *gin.Context, req CreateWebhookReq) (ginx.Result, error) {
 	id, err := h.svc.CreateWebhook(ctx.Request.Context(), middleware.GetTenantID(ctx), req.Name, req.EventTypes, req.TargetURL, req.Secret)
 	if err != nil {
-		return ErrorResultWithMsg(errs.ParamsError, err.Error()), nil
+		return ErrorResultWithMsg(errs.ParamsError, openAPIErrorMessage(err)), nil
 	}
 	return Result(map[string]interface{}{"id": id}), nil
 }
@@ -228,7 +276,7 @@ func (h *OpenAPIHandler) UpdateWebhook(ctx *gin.Context, req UpdateWebhookReq) (
 		if err == errs.ErrWebhookNotFound {
 			return ErrorResult(errs.OpenAPIWebhookNotFound), nil
 		}
-		return ErrorResultWithMsg(errs.ParamsError, err.Error()), nil
+		return ErrorResultWithMsg(errs.ParamsError, openAPIErrorMessage(err)), nil
 	}
 	return Result(nil), nil
 }
