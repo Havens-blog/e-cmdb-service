@@ -283,6 +283,10 @@ func (h *RelationHandler) UpdateModelRelation(ctx *gin.Context, req UpdateModelR
 
 	err = h.modelRelSvc.Update(ctx.Request.Context(), existing)
 	if err != nil {
+		// 空白名称/模型缺失这类规则错误要给 400 + 中文原因，不能被兜底成 500
+		if result, ok := modelRelationTypeErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 

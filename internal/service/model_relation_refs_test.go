@@ -44,6 +44,7 @@ func (f *refModelRepo) Delete(context.Context, string) error { return nil }
 type refRelationRepo struct {
 	existing  map[string]bool
 	created   []domain.ModelRelationType
+	updated   []domain.ModelRelationType
 	createErr error
 	existsErr error
 }
@@ -68,7 +69,10 @@ func (f *refRelationRepo) Count(context.Context, domain.ModelRelationTypeFilter)
 	return 0, nil
 }
 
-func (f *refRelationRepo) Update(context.Context, domain.ModelRelationType) error { return nil }
+func (f *refRelationRepo) Update(_ context.Context, rel domain.ModelRelationType) error {
+	f.updated = append(f.updated, rel)
+	return nil
+}
 
 func (f *refRelationRepo) Delete(context.Context, string) error { return nil }
 
@@ -280,4 +284,53 @@ func (f *refModelRepo) Exists(_ context.Context, uid string) (bool, error) {
 
 func (f *refRelationRepo) GetByID(_ context.Context, id int64) (domain.ModelRelationType, error) {
 	return domain.ModelRelationType{ID: id}, nil
+}
+
+// Update 必须与 Create 同一套裁剪 + 校验：
+// 否则 PUT /model-relations/:uid 传 "   " 就能把名称改成空白。
+func TestUpdateRelationType_RejectsBlankName(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{"ecs_disk": true}}
+	svc := newRefService(&refModelRepo{}, rels)
+
+	rel := validRelation()
+	rel.Name = "   "
+	if err := svc.Update(context.Background(), rel); !errors.Is(err, domain.ErrInvalidRelationName) {
+		t.Fatalf("期望 ErrInvalidRelationName，实际 %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("空白名称不应落库，实际写入 %+v", rels.updated)
+	}
+}
+
+func TestUpdateRelationType_TrimsBeforeWrite(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{"zz_rel_trim": true}}
+	svc := newRefService(&refModelRepo{}, rels)
+
+	rel := validRelation()
+	rel.UID = "  zz_rel_trim  "
+	rel.Name = "  裁剪后的名称  "
+	rel.SourceModelUID = " ecs "
+	rel.TargetModelUID = " disk "
+	if err := svc.Update(context.Background(), rel); err != nil {
+		t.Fatalf("期望更新成功，实际 %v", err)
+	}
+	if len(rels.updated) != 1 {
+		t.Fatalf("期望写入 1 次，实际 %d", len(rels.updated))
+	}
+	got := rels.updated[0]
+	if got.UID != "zz_rel_trim" || got.Name != "裁剪后的名称" || got.SourceModelUID != "ecs" || got.TargetModelUID != "disk" {
+		t.Fatalf("落库值未裁剪：%+v", got)
+	}
+}
+
+func TestUpdateRelationType_UnknownUIDIsNotFound(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{}}
+	svc := newRefService(&refModelRepo{}, rels)
+
+	if err := svc.Update(context.Background(), validRelation()); !errors.Is(err, errs.ErrRelationNotFound) {
+		t.Fatalf("期望 ErrRelationNotFound，实际 %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("不存在的关系类型不应落库")
+	}
 }

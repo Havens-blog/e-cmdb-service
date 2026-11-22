@@ -120,6 +120,16 @@ func (s *modelRelationTypeService) List(ctx context.Context, filter domain.Model
 }
 
 func (s *modelRelationTypeService) Update(ctx context.Context, rel domain.ModelRelationType) error {
+	// 与 Create 保持同一套裁剪 + 校验：HTTP 层 binding:"required" 放行 " "，
+	// 若这里不裁剪不判空，PUT 就能把关系类型改成空白名称（列表与拓扑边标签都为空白）。
+	rel.UID = strings.TrimSpace(rel.UID)
+	rel.Name = strings.TrimSpace(rel.Name)
+	rel.SourceModelUID = strings.TrimSpace(rel.SourceModelUID)
+	rel.TargetModelUID = strings.TrimSpace(rel.TargetModelUID)
+	if err := rel.Validate(); err != nil {
+		return err
+	}
+
 	exists, err := s.repo.Exists(ctx, rel.UID)
 	if err != nil {
 		return fmt.Errorf("failed to check relation type existence: %w", err)
