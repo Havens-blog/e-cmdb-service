@@ -129,7 +129,17 @@ func (s *attributeService) UpdateAttribute(ctx context.Context, attr domain.Attr
 }
 
 // DeleteAttribute 删除属性
+//
+// 先确认记录存在再删：DAO 的 DeleteOne 在「没有匹配文档」时不报错，直接返回
+// nil 会让接口对不存在的 id 回 200 success —— 前端据此提示「删除成功」，
+// 用户以为删掉了、刷新后又出现（或对象本就不存在却被告知成功）。
+// 与 DeleteAttributeGroup 的存在性检查保持一致，缺失时统一返回 ErrAttributeNotFound。
 func (s *attributeService) DeleteAttribute(ctx context.Context, id int64) error {
+	existing, err := s.attrRepo.GetByID(ctx, id)
+	if err != nil || existing.ID == 0 {
+		return errs.ErrAttributeNotFound
+	}
+
 	return s.attrRepo.Delete(ctx, id)
 }
 
