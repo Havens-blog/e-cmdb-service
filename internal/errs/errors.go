@@ -44,7 +44,10 @@ var (
 	RelationInvalid  = ErrorCode{Code: 400004, Msg: "relation invalid"}
 	// RelationModelMismatch: 关系类型声明了固定的「源模型 → 目标模型」，
 	// 两端实例的模型必须与之匹配，否则关系语义（方向/基数）无法成立。
-	RelationModelMismatch = ErrorCode{Code: 400010, Msg: "relation model mismatch"}
+	// 编号说明：400010 已被 RelationTypeInUse（删除保护，#70）占用；
+	// 400011/400012 预留给「关系类型引用的源/目标模型不存在」（在途 PR #77）；
+	// 本错误取 400013，避免三种语义共用一个对外 code。
+	RelationModelMismatch = ErrorCode{Code: 400013, Msg: "relation model mismatch"}
 )
 
 // 属性相关错误码
