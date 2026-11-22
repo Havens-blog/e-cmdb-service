@@ -115,6 +115,11 @@ func (f *semanticInstanceRepo) Facets(ctx context.Context, tenantID int64) (*dom
 func (f *semanticInstanceRepo) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
 	return 0, nil
 }
+
+// CountByAttributeKey 桩实现：删除字段前的「被使用」计数（测试中不使用）
+func (f *semanticInstanceRepo) CountByAttributeKey(ctx context.Context, modelUID, fieldUID string) (int64, error) {
+	return 0, nil
+}
 func (f *semanticInstanceRepo) Delete(ctx context.Context, tenantID int64, id int64) error {
 	return nil
 }
