@@ -170,14 +170,38 @@ func (h *RelationHandler) CreateModelRelation(ctx *gin.Context, req CreateModelR
 
 	id, err := h.modelRelSvc.Create(ctx.Request.Context(), rel)
 	if err != nil {
-		if err == errs.ErrRelationExists {
-			return ErrorResultWithMsg(errs.ParamsError,
-				"该关系类型已存在：源模型、目标模型与关系类型不能重复定义"), nil
+		if result, ok := modelRelationTypeErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
 	return Result(map[string]interface{}{"id": id}), nil
+}
+
+// modelRelationTypeErrorResult 把模型关系类型的业务拒绝翻成中文可读原因。
+//
+// 为什么需要：agent 之前这些分支要么返回英文哨兵（"relation already exists"），
+// 要么把「引用了已删除的模型」这类明确原因折成 500 system error，
+// 前端只能弹「操作失败」，用户无法判断该改哪个模型或换哪个类型。
+// 未知错误返回 ok=false，交给上层回落，避免吞掉真正的系统错误。
+func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
+	switch {
+	case errors.Is(err, errs.ErrRelationExists):
+		return ErrorResultWithMsg(errs.RelationExists,
+			"该关系类型已存在：源模型、目标模型与关系类型不能重复定义"), true
+	case errors.Is(err, errs.ErrRelationSourceModelNotFound):
+		return ErrorResultWithMsg(errs.RelationSourceModelNotFound,
+			"源模型不存在或已被删除，请刷新模型列表后重新选择"), true
+	case errors.Is(err, errs.ErrRelationTargetModelNotFound):
+		return ErrorResultWithMsg(errs.RelationTargetModelNotFound,
+			"目标模型不存在或已被删除，请刷新模型列表后重新选择"), true
+	case errors.Is(err, domain.ErrInvalidRelationTypeUID):
+		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型标识（UID）不能为空"), true
+	case errors.Is(err, domain.ErrInvalidRelationModel):
+		return ErrorResultWithMsg(errs.RelationInvalid, "源模型与目标模型都必须选择"), true
+	}
+	return ginx.Result{}, false
 }
 
 func (h *RelationHandler) ListModelRelations(ctx *gin.Context) {

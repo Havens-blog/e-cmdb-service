@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -21,20 +22,36 @@ type ModelRelationTypeService interface {
 }
 
 type modelRelationTypeService struct {
-	repo   repository.ModelRelationTypeRepository
-	logger *elog.Component
+	repo      repository.ModelRelationTypeRepository
+	modelRepo repository.ModelRepository
+	logger    *elog.Component
 }
 
-// NewModelRelationTypeService 创建模型关系类型服务
-func NewModelRelationTypeService(repo repository.ModelRelationTypeRepository) ModelRelationTypeService {
+// NewModelRelationTypeService 创建模型关系类型服务。
+//
+// modelRepo 只用于 Create 时校验 source/target 模型确实存在；传 nil 时跳过该校验
+// （保留给尚未装配模型仓储的测试与旧调用点，生产装配见 internal/module.go）。
+func NewModelRelationTypeService(repo repository.ModelRelationTypeRepository, modelRepo repository.ModelRepository) ModelRelationTypeService {
 	return &modelRelationTypeService{
-		repo:   repo,
-		logger: elog.DefaultLogger,
+		repo:      repo,
+		modelRepo: modelRepo,
+		logger:    elog.DefaultLogger,
 	}
 }
 
 func (s *modelRelationTypeService) Create(ctx context.Context, rel domain.ModelRelationType) (int64, error) {
+	// 先裁剪再校验：`binding:"required"` 只拒空串，单个空格能进到这里，
+	// 存成 " " 的 uid 会让关系类型在列表里「看得见、选不着」。
+	rel.UID = strings.TrimSpace(rel.UID)
+	rel.Name = strings.TrimSpace(rel.Name)
+	rel.SourceModelUID = strings.TrimSpace(rel.SourceModelUID)
+	rel.TargetModelUID = strings.TrimSpace(rel.TargetModelUID)
+
 	if err := rel.Validate(); err != nil {
+		return 0, err
+	}
+
+	if err := s.ensureModelsExist(ctx, rel.SourceModelUID, rel.TargetModelUID); err != nil {
 		return 0, err
 	}
 
@@ -47,6 +64,34 @@ func (s *modelRelationTypeService) Create(ctx context.Context, rel domain.ModelR
 	}
 
 	return s.repo.Create(ctx, rel)
+}
+
+// ensureModelsExist 校验关系类型声明的源/目标模型都存在。
+//
+// 关系类型是「哪些模型之间可以建立关系」的声明，声明本身指向不存在的模型时，
+// 实例关系页会按该 uid 检索资产，候选恒为 0，用户只能看到「没有匹配的资产」而不知原因。
+func (s *modelRelationTypeService) ensureModelsExist(ctx context.Context, sourceModelUID, targetModelUID string) error {
+	if s.modelRepo == nil {
+		return nil
+	}
+
+	source, err := s.modelRepo.GetByUID(ctx, sourceModelUID)
+	if err != nil {
+		return fmt.Errorf("failed to load source model %s: %w", sourceModelUID, err)
+	}
+	if source.ID == 0 {
+		return fmt.Errorf("%w: model_uid=%s", errs.ErrRelationSourceModelNotFound, sourceModelUID)
+	}
+
+	target, err := s.modelRepo.GetByUID(ctx, targetModelUID)
+	if err != nil {
+		return fmt.Errorf("failed to load target model %s: %w", targetModelUID, err)
+	}
+	if target.ID == 0 {
+		return fmt.Errorf("%w: model_uid=%s", errs.ErrRelationTargetModelNotFound, targetModelUID)
+	}
+
+	return nil
 }
 
 func (s *modelRelationTypeService) GetByUID(ctx context.Context, uid string) (domain.ModelRelationType, error) {
