@@ -1,9 +1,9 @@
 package web
 
 import (
+	"net/http"
 	"strings"
 
-	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
@@ -25,11 +25,11 @@ func NewModelGroupHandler(svc service.ModelGroupService) *ModelGroupHandler {
 func (h *ModelGroupHandler) RegisterRoutes(r *gin.RouterGroup) {
 	groupRouter := r.Group("/model-groups")
 	{
-		groupRouter.POST("", ginx.WrapBody[CreateModelGroupReq](h.Create))
+		groupRouter.POST("", h.Create)
 		groupRouter.GET("", h.List)
 		groupRouter.GET("/with-models", h.ListWithModels)
 		groupRouter.GET("/:uid", h.GetByUID)
-		groupRouter.PUT("/:uid", ginx.WrapBody[UpdateModelGroupReq](h.Update))
+		groupRouter.PUT("/:uid", h.Update)
 		groupRouter.DELETE("/:uid", h.Delete)
 		groupRouter.POST("/init", h.InitBuiltinGroups)
 	}
@@ -45,13 +45,17 @@ type CreateModelGroupReq struct {
 }
 
 // UpdateModelGroupReq 更新模型分组请求
+//
+// 全部用指针（Name 已有，Icon/SortOrder/Description 本次补上）：
+// 部分更新若用零值当「未传」哨兵，`sort_order: 0`（置顶）与
+// `description: ""`（清空描述）都会被静默忽略，字段永远保留旧值。
 type UpdateModelGroupReq struct {
 	// Name 用指针区分「未传」与「显式传空」：未传保留旧值（部分更新），
-	// 显式传空/纯空白则仍走服务层校验返回 400，而不是被静默忽略（评审 #1 后续补验）。
+	// 显式传空/纯空白则仍走服务层校验返回 400，而不是被静默忽略。
 	Name        *string `json:"name"`
-	Icon        string  `json:"icon"`
-	SortOrder   int     `json:"sort_order"`
-	Description string  `json:"description"`
+	Icon        *string `json:"icon"`
+	SortOrder   *int    `json:"sort_order"`
+	Description *string `json:"description"`
 }
 
 // ModelGroupVO 模型分组视图对象
@@ -74,7 +78,12 @@ type ModelGroupWithModelsVO struct {
 }
 
 // Create 创建模型分组
-func (h *ModelGroupHandler) Create(ctx *gin.Context, req CreateModelGroupReq) (ginx.Result, error) {
+func (h *ModelGroupHandler) Create(ctx *gin.Context) {
+	var req CreateModelGroupReq
+	if !bindJSONBody(ctx, &req) {
+		return
+	}
+
 	// 裁剪首尾空白：gin 的 binding:"required" 不拦纯空白，实测 " " 能建出一个没有标识的空分组。
 	group := domain.ModelGroup{
 		UID:         strings.TrimSpace(req.UID),
@@ -86,13 +95,14 @@ func (h *ModelGroupHandler) Create(ctx *gin.Context, req CreateModelGroupReq) (g
 
 	id, err := h.svc.Create(ctx.Request.Context(), group)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			return result, nil
+		if writeModelConfigError(ctx, err) {
+			return
 		}
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
 	}
 
-	return Result(map[string]any{"id": id}), nil
+	ctx.JSON(http.StatusOK, Result(map[string]any{"id": id}))
 }
 
 // List 获取模型分组列表
@@ -168,55 +178,63 @@ func (h *ModelGroupHandler) GetByUID(ctx *gin.Context) {
 
 	group, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrModelGroupNotFound {
-			ctx.JSON(404, ErrorResult(errs.ModelGroupNotFound))
+		// 与模型侧 GetByUID 同口径：走统一翻译（原先这里用 `err == 哨兵` +
+		// ErrorResult 返回英文 "model group not found"，是本包唯一漏改的入口）。
+		if writeModelConfigError(ctx, err) {
 			return
 		}
-		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}
 
-	ctx.JSON(200, Result(h.toVO(group)))
+	ctx.JSON(http.StatusOK, Result(h.toVO(group)))
 }
 
 // Update 更新模型分组
-func (h *ModelGroupHandler) Update(ctx *gin.Context, req UpdateModelGroupReq) (ginx.Result, error) {
+func (h *ModelGroupHandler) Update(ctx *gin.Context) {
+	var req UpdateModelGroupReq
+	if !bindJSONBody(ctx, &req) {
+		return
+	}
 	uid := strings.TrimSpace(ctx.Param("uid"))
 
-	// 与模型更新同口径：先取回旧值再按非空字段合并（评审 #1）。
-	// UpdateModelGroupReq 的所有字段在 OpenAPI 里都是可选的，
-	// 若整条替换，只传 {"description":...} 的部分更新会把分组名冲成空串
-	// （服务层现在会拒绝空名称，于是这类合法请求变成 400）。
+	// 与模型更新同口径：先取回旧值再按「是否传入」合并。
+	// UpdateModelGroupReq 所有字段在 OpenAPI 里都是可选的，
+	// 若整条替换，只传 {"description":...} 的部分更新会把分组名冲成空串。
 	existing, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			return result, nil
+		if writeModelConfigError(ctx, err) {
+			return
 		}
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
 	}
 
 	if req.Name != nil {
-		existing.Name = *req.Name
+		// 与 Create 一致：handler 层先裁剪，纯空白裁成空串后由服务层统一拒绝，
+		// 避免「显式传纯空白」在 handler 与 service 之间出现两套规范化路径。
+		existing.Name = strings.TrimSpace(*req.Name)
 	}
-	if req.Icon != "" {
-		existing.Icon = req.Icon
+	if req.Icon != nil {
+		existing.Icon = *req.Icon
 	}
-	if req.SortOrder != 0 {
-		existing.SortOrder = req.SortOrder
+	if req.SortOrder != nil {
+		existing.SortOrder = *req.SortOrder
 	}
-	if req.Description != "" {
-		existing.Description = req.Description
+	if req.Description != nil {
+		existing.Description = *req.Description
 	}
 
 	err = h.svc.Update(ctx.Request.Context(), existing)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			return result, nil
+		if writeModelConfigError(ctx, err) {
+			return
 		}
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
 	}
 
-	return Result(nil), nil
+	ctx.JSON(http.StatusOK, Result(nil))
 }
 
 // Delete 删除模型分组
@@ -225,23 +243,16 @@ func (h *ModelGroupHandler) Delete(ctx *gin.Context) {
 
 	err := h.svc.Delete(ctx.Request.Context(), uid)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			// 未找到 → 404；「内置不可删」保持 400；「组内仍有模型」是 409（资源状态冲突）。
-			status := 409
-			switch result.Code {
-			case errs.ModelGroupNotFound.Code:
-				status = 404
-			case errs.CannotDeleteBuiltin.Code:
-				status = 400
-			}
-			ctx.JSON(status, result)
+		// 状态码统一由 modelConfigErrorStatus 决定：未找到 404、组内仍有模型 409、
+		// 内置不可删 400。原先在这里 switch 业务码，新增哨兵错误会落进默认分支变 409。
+		if writeModelConfigError(ctx, err) {
 			return
 		}
-		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}
 
-	ctx.JSON(200, Result(nil))
+	ctx.JSON(http.StatusOK, Result(nil))
 }
 
 // InitBuiltinGroups 初始化内置分组

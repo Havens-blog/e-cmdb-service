@@ -1,9 +1,9 @@
 package web
 
 import (
+	"net/http"
 	"strings"
 
-	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
@@ -25,10 +25,10 @@ func NewModelHandler(svc service.ModelService) *ModelHandler {
 func (h *ModelHandler) RegisterRoutes(r *gin.RouterGroup) {
 	g := r.Group("/models")
 	{
-		g.POST("", ginx.WrapBody[CreateModelReq](h.Create))
+		g.POST("", h.Create)
 		g.GET("/:uid", h.GetByUID)
 		g.GET("", h.List)
-		g.PUT("/:uid", ginx.WrapBody[UpdateModelReq](h.Update))
+		g.PUT("/:uid", h.Update)
 		g.DELETE("/:uid", h.Delete)
 	}
 }
@@ -48,12 +48,16 @@ type CreateModelReq struct {
 }
 
 // UpdateModelReq 更新模型请求
+//
+// 除 Extensible 外全部使用指针：更新接口是「部分更新」，
+// 用零值当「未传」的哨兵会把「显式清空」也一起吞掉——
+// 例如 model_group_id=0（移回未分组）、icon=""（清空图标）此前永远不生效。
 type UpdateModelReq struct {
-	Name         string `json:"name"`
-	ModelGroupID int64  `json:"model_group_id"`
-	Icon         string `json:"icon"`
-	Description  string `json:"description"`
-	Extensible   *bool  `json:"extensible"`
+	Name         *string `json:"name"`
+	ModelGroupID *int64  `json:"model_group_id"`
+	Icon         *string `json:"icon"`
+	Description  *string `json:"description"`
+	Extensible   *bool   `json:"extensible"`
 }
 
 // ModelVO 模型视图对象
@@ -80,7 +84,15 @@ type ModelListResp struct {
 }
 
 // Create 创建模型
-func (h *ModelHandler) Create(ctx *gin.Context, req CreateModelReq) (ginx.Result, error) {
+//
+// 不再使用 ginx.WrapBody：它绑定失败时只写日志、不写响应体（客户端拿到空 200），
+// 且业务拒绝一律 200，与本包 Delete/GetByUID 的状态码口径不一致。
+func (h *ModelHandler) Create(ctx *gin.Context) {
+	var req CreateModelReq
+	if !bindJSONBody(ctx, &req) {
+		return
+	}
+
 	model := domain.Model{
 		UID:          req.UID,
 		Name:         req.Name,
@@ -96,13 +108,14 @@ func (h *ModelHandler) Create(ctx *gin.Context, req CreateModelReq) (ginx.Result
 
 	id, err := h.svc.Create(ctx.Request.Context(), model)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			return result, nil
+		if writeModelConfigError(ctx, err) {
+			return
 		}
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
 	}
 
-	return Result(map[string]interface{}{"id": id}), nil
+	ctx.JSON(http.StatusOK, Result(map[string]interface{}{"id": id}))
 }
 
 // GetByUID 根据UID获取模型
@@ -200,28 +213,35 @@ func (h *ModelHandler) List(ctx *gin.Context) {
 }
 
 // Update 更新模型
-func (h *ModelHandler) Update(ctx *gin.Context, req UpdateModelReq) (ginx.Result, error) {
+func (h *ModelHandler) Update(ctx *gin.Context) {
+	var req UpdateModelReq
+	if !bindJSONBody(ctx, &req) {
+		return
+	}
 	uid := strings.TrimSpace(ctx.Param("uid"))
 
 	existing, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			return result, nil
+		if writeModelConfigError(ctx, err) {
+			return
 		}
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
 	}
 
-	if req.Name != "" {
-		existing.Name = req.Name
+	// 指针字段：nil 表示「本次不改」，非 nil 表示「按传入值覆盖」，
+	// 因此显式传空串/0 会被真正写回（配合服务层校验给出中文拒绝）。
+	if req.Name != nil {
+		existing.Name = strings.TrimSpace(*req.Name)
 	}
-	if req.ModelGroupID > 0 {
-		existing.ModelGroupID = req.ModelGroupID
+	if req.ModelGroupID != nil {
+		existing.ModelGroupID = *req.ModelGroupID
 	}
-	if req.Icon != "" {
-		existing.Icon = req.Icon
+	if req.Icon != nil {
+		existing.Icon = *req.Icon
 	}
-	if req.Description != "" {
-		existing.Description = req.Description
+	if req.Description != nil {
+		existing.Description = *req.Description
 	}
 	if req.Extensible != nil {
 		existing.Extensible = *req.Extensible
@@ -229,13 +249,14 @@ func (h *ModelHandler) Update(ctx *gin.Context, req UpdateModelReq) (ginx.Result
 
 	err = h.svc.Update(ctx.Request.Context(), existing)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			return result, nil
+		if writeModelConfigError(ctx, err) {
+			return
 		}
-		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		return
 	}
 
-	return Result(nil), nil
+	ctx.JSON(http.StatusOK, Result(nil))
 }
 
 // Delete 删除模型
@@ -244,20 +265,16 @@ func (h *ModelHandler) Delete(ctx *gin.Context) {
 
 	err := h.svc.Delete(ctx.Request.Context(), uid)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			// 未找到 → 404；「仍有实例」是可自助修复的 409。
-			status := 409
-			if result.Code == errs.ModelNotFound.Code {
-				status = 404
-			}
-			ctx.JSON(status, result)
+		// 状态码由 modelConfigErrorStatus 统一决定（未找到 404 / 仍有实例 409），
+		// 不再在本处用 switch 反查业务码。
+		if writeModelConfigError(ctx, err) {
 			return
 		}
-		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}
 
-	ctx.JSON(200, Result(nil))
+	ctx.JSON(http.StatusOK, Result(nil))
 }
 
 func (h *ModelHandler) toVO(model domain.Model) ModelVO {

@@ -2,8 +2,10 @@ package web
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/Havens-blog/e-common-go/ginx"
+	"github.com/gin-gonic/gin"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 )
@@ -53,4 +55,46 @@ func modelConfigErrorResult(err error) (ginx.Result, bool) {
 	default:
 		return ginx.Result{}, false
 	}
+}
+
+// modelConfigErrorStatus 把「对外业务错误码」映射为 HTTP 状态码。
+//
+// 收敛背景：此前状态码选择散落在每个 handler 里——GetByUID 固定 404、
+// Create/Update 由 ginx.WrapBody 固定 200、Delete 用 `switch result.Code` 反查，
+// 同一类「业务拒绝」在 PUT 与 DELETE 上是两种 HTTP 语义。
+// 更危险的是 Delete 的默认分支取 409：service 层将来新增任何哨兵错误，
+// 都会被当成「冲突」返回，即使它其实是参数校验失败。
+//
+// 现在由这一处决定：未找到 → 404，冲突/重复 → 409，其余业务拒绝 → 400。
+func modelConfigErrorStatus(code int) int {
+	switch code {
+	case errs.ModelNotFound.Code, errs.ModelGroupNotFound.Code:
+		return http.StatusNotFound
+	case errs.ModelExists.Code, errs.ModelGroupExists.Code, errs.GroupHasModels.Code:
+		return http.StatusConflict
+	default:
+		return http.StatusBadRequest
+	}
+}
+
+// writeModelConfigError 统一写出业务拒绝：HTTP 状态取 modelConfigErrorStatus，
+// body 为中文信封，前端 extractApiErrorMessage 读 msg 即可展示。
+func writeModelConfigError(ctx *gin.Context, err error) bool {
+	result, ok := modelConfigErrorResult(err)
+	if !ok {
+		return false
+	}
+	ctx.JSON(modelConfigErrorStatus(result.Code), result)
+	return true
+}
+
+// bindJSONBody 自己绑定请求体，替代 ginx.WrapBody：后者绑定失败时只写日志、
+// 不写响应体，客户端拿到的是空 200，无法自助定位问题。
+func bindJSONBody(ctx *gin.Context, req any) bool {
+	if err := ctx.ShouldBindJSON(req); err != nil {
+		ctx.JSON(http.StatusBadRequest, ErrorResultWithMsg(errs.ParamsError,
+			"请求体格式不正确，请检查字段类型后重试"))
+		return false
+	}
+	return true
 }
