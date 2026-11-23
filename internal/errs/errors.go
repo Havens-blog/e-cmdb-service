@@ -44,14 +44,21 @@ var (
 	RelationInvalid  = ErrorCode{Code: 400004, Msg: "relation invalid"}
 	// RelationModelMismatch: 关系类型声明了固定的「源模型 → 目标模型」，
 	// 两端实例的模型必须与之匹配，否则关系语义（方向/基数）无法成立。
-	// 编号说明：400010 已被 RelationTypeInUse（删除保护，#70）占用；
-	// 400011/400012 预留给「关系类型引用的源/目标模型不存在」（在途 PR #77）；
-	// 本错误取 400013，避免三种语义共用一个对外 code。
+	// 编号说明（400xxx 关系/属性域）：
+	//   400010 RelationTypeInUse         删除在用模型关系类型被拒（#70）
+	//   400011/400012                    「关系类型引用的源/目标模型不存在」（#77）
+	//   400013 RelationModelMismatch     本错误
+	//   400014 AttributeInUse            删除在用字段被拒（#78）
+	//   400015 ModelRelationTypeNotFound 关系类型不存在（下面那个）
+	// 600xxx 段不连续是刻意的：每个语义独占一个对外 code，避免前端按 code 分支时撞号。
 	RelationModelMismatch = ErrorCode{Code: 400013, Msg: "relation model mismatch"}
-	// RelationTypeNotFound: 关系类型不存在。原先复用 RelationInvalid（400004），
-	// 但该 sentinel 同时被 DeriveRelations 用来表示「不支持的推导规则」，
-	// 两者语义不同，一旦调用点复用映射就会给推导请求返回「关系类型不存在」的误导文案。
-	RelationTypeNotFound = ErrorCode{Code: 400015, Msg: "relation type not found"}
+	// ModelRelationTypeNotFound: 关系类型（模型关系元数据）不存在。原先复用
+	// RelationInvalid（400004），但该 sentinel 同时被 DeriveRelations 用来表示
+	// 「不支持的推导规则」，两者语义不同，一旦调用点复用映射就会给推导请求返回
+	// 「关系类型不存在」的误导文案。
+	// 命名刻意带 Model 前缀：与实例关系侧的 ErrRelationNotFound 区分，避免在
+	// instanceRelationErrorResult 里两个「not found」互相误匹配。
+	ModelRelationTypeNotFound = ErrorCode{Code: 400015, Msg: "relation type not found"}
 )
 
 // 属性相关错误码
@@ -93,11 +100,11 @@ var (
 	ErrInstanceExists    = errors.New("instance already exists")
 	ErrInvalidAttributes = errors.New("invalid attributes")
 
-	ErrRelationNotFound      = errors.New("relation not found")
-	ErrRelationExists        = errors.New("relation already exists")
-	ErrInvalidRelation       = errors.New("invalid relation")
-	ErrRelationModelMismatch = errors.New("relation model mismatch")
-	ErrRelationTypeNotFound  = errors.New("relation type not found")
+	ErrRelationNotFound          = errors.New("relation not found")
+	ErrRelationExists            = errors.New("relation already exists")
+	ErrInvalidRelation           = errors.New("invalid relation")
+	ErrRelationModelMismatch     = errors.New("relation model mismatch")
+	ErrModelRelationTypeNotFound = errors.New("relation type not found")
 
 	ErrAttributeNotFound = errors.New("attribute not found")
 	ErrAttributeExists   = errors.New("attribute already exists")

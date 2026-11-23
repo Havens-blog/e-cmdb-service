@@ -307,10 +307,15 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 		// 否则方向与基数语义不成立（实测可用 vpc_subnet 连接两个 host 实例）。
 		return ErrorResultWithMsg(errs.RelationModelMismatch,
 			"所选关系类型要求固定的资产类型组合，当前源资产或目标资产的类型不符合，请重新选择"), true
-	case errors.Is(err, errs.ErrRelationTypeNotFound):
+	case errors.Is(err, errs.ErrInvalidTenantID):
+		// 会话未选择租户时 tenant_id=0。此前会退化成跨租户读取并把关系写成 tenant_id=0，
+		// 属于越权读 + 无归属写入，这里明确拒绝而不是让 DAO 的「tenantID>0 才加谓词」兜着。
+		return ErrorResultWithMsg(errs.ParamsError,
+			"未选择租户，无法操作实例关系；请先切换到具体租户后重试"), true
+	case errors.Is(err, errs.ErrModelRelationTypeNotFound):
 		// 独立 sentinel：ErrInvalidRelation 在 service 层还表示「不支持的推导规则」，
 		// 两者共用会让推导请求被回成「关系类型不存在」。
-		return ErrorResultWithMsg(errs.RelationTypeNotFound,
+		return ErrorResultWithMsg(errs.ModelRelationTypeNotFound,
 			"关系类型不存在或已被删除，请刷新后重新选择"), true
 	}
 	return ginx.Result{}, false

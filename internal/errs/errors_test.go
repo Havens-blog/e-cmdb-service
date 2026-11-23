@@ -33,10 +33,11 @@ func TestErrorCodeUnique(t *testing.T) {
 		{"RelationExists", RelationExists},
 		{"RelationInvalid", RelationInvalid},
 		{"RelationModelMismatch", RelationModelMismatch},
-		{"RelationTypeNotFound", RelationTypeNotFound},
+		{"ModelRelationTypeNotFound", ModelRelationTypeNotFound},
 		{"AttributeNotFound", AttributeNotFound},
 		{"AttributeExists", AttributeExists},
 		{"AttributeInvalid", AttributeInvalid},
+		{"AttributeInUse", AttributeInUse},
 		{"ModelGroupNotFound", ModelGroupNotFound},
 		{"ModelGroupExists", ModelGroupExists},
 		{"ModelGroupInvalid", ModelGroupInvalid},
@@ -56,7 +57,7 @@ func TestErrorCodeUnique(t *testing.T) {
 
 	// 覆盖性校验：直接扫 errors.go 的声明，确保「声明了但没登记」也会被发现。
 	// 早前的实现只在表内去重，注释里写的「反射式兜底」并不存在，
-	// 于是新增的 RelationTypeNotFound 漏登记也不会报错（评审指出）。
+	// 于是新增的错误码漏登记也不会报错（评审指出）。
 	declared := declaredErrorCodeNames(t)
 	for _, name := range declared {
 		if _, ok := registered[name]; !ok {

@@ -47,6 +47,21 @@ func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo
 	}
 }
 
+// requireSelectedTenant 拒绝「会话未选择租户」的写入（tenantID <= 0）。
+//
+// 缺陷背景（评审指出，2026-11-23）：middleware.GetTenantID 对未选租户的会话返回 0，
+// 而 instanceDAO.ListByIDs 只在 tenantID > 0 时才追加租户谓词。于是 tenant_id=0 的
+// 创建请求会跨所有租户加载实例做校验，并把关系持久化成 tenant_id=0——
+// 既读到了不该读的数据，也写入了一条谁都不归属的关系。
+// DeriveInstanceRelations 早就在 handler 层拒绝 0，这里把同一约束下沉到 service，
+// 让直接调用 service 的内部路径也受保护。
+func requireSelectedTenant(tenantID int64) error {
+	if tenantID <= 0 {
+		return fmt.Errorf("%w: tenant_id=%d", errs.ErrInvalidTenantID, tenantID)
+	}
+	return nil
+}
+
 // loadEndpointModels 加载关系两端实例的模型 UID（同租户），同时校验每个 id 都存在。
 //
 // 缺陷背景（实测 2026-11-17）：Create 只做查重、不校验端点实例，历史上产生了
@@ -95,9 +110,13 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 	if s.instanceRepo == nil {
 		return nil
 	}
+	// 一次按租户分组：既收集端点 id，也保留该租户的关系列表。
+	// 早前实现是「对每个租户都重扫一遍 relations」，批量规模 × 租户数时是 O(T×R)。
 	idsByTenant := make(map[int64][]int64, 4)
+	relsByTenant := make(map[int64][]domain.InstanceRelation, 4)
 	for _, rel := range relations {
 		idsByTenant[rel.TenantID] = append(idsByTenant[rel.TenantID], rel.SourceInstanceID, rel.TargetInstanceID)
+		relsByTenant[rel.TenantID] = append(relsByTenant[rel.TenantID], rel)
 	}
 	typeCache := make(map[string]domain.ModelRelationType, len(relations))
 	// 按 tenantID 升序遍历：map 迭代顺序随机，会让「批量里哪一条先被拒绝」跨请求不稳定，
@@ -120,10 +139,7 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 		if s.modelRelRepo == nil {
 			continue
 		}
-		for _, rel := range relations {
-			if rel.TenantID != tenantID {
-				continue
-			}
+		for _, rel := range relsByTenant[tenantID] {
 			if err := s.validateModelPair(ctx, rel, models, typeCache); err != nil {
 				return err
 			}
@@ -148,10 +164,21 @@ func (s *relationService) validateModelPair(
 			return fmt.Errorf("failed to load relation type %q: %w", rel.RelationTypeUID, err)
 		}
 		if loaded.ID == 0 {
-			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrRelationTypeNotFound, rel.RelationTypeUID)
+			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrModelRelationTypeNotFound, rel.RelationTypeUID)
 		}
 		relType = loaded
 		cache[rel.RelationTypeUID] = loaded
+	}
+	// 历史数据里存在「声明为空」的关系类型（Validate 会拒新写入，但可以早于校验存在），
+	// 若照常比对，任何真实实例都会被判 mismatch，等于把一个元数据瑕疵变成全量写入阻塞。
+	// 这种情况只跳过模型对校验（端点存在性已在 loadEndpointModels 校验），
+	// 让调用方仍能建立关系，元数据问题留给关系类型编辑面去修。
+	if relType.SourceModelUID == "" || relType.TargetModelUID == "" {
+		s.logger.Warn("关系类型未声明源/目标模型，跳过模型对校验",
+			elog.String("relation_type_uid", relType.UID),
+			elog.String("source_model_uid", relType.SourceModelUID),
+			elog.String("target_model_uid", relType.TargetModelUID))
+		return nil
 	}
 	sourceModel := models[rel.SourceInstanceID]
 	targetModel := models[rel.TargetInstanceID]
@@ -165,6 +192,9 @@ func (s *relationService) validateModelPair(
 }
 
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {
+	if err := requireSelectedTenant(relation.TenantID); err != nil {
+		return 0, err
+	}
 	if err := s.validateRelationEndpoints(ctx, []domain.InstanceRelation{relation}); err != nil {
 		return 0, err
 	}
@@ -182,6 +212,11 @@ func (s *relationService) Create(ctx context.Context, relation domain.InstanceRe
 func (s *relationService) CreateBatch(ctx context.Context, relations []domain.InstanceRelation) (int64, error) {
 	if len(relations) == 0 {
 		return 0, nil
+	}
+	for _, rel := range relations {
+		if err := requireSelectedTenant(rel.TenantID); err != nil {
+			return 0, fmt.Errorf("relation[source=%d target=%d]: %w", rel.SourceInstanceID, rel.TargetInstanceID, err)
+		}
 	}
 	// 校验端点存在性与模型对（按租户聚合）；全部通过才写入，避免部分写入产生非法关系
 	if err := s.validateRelationEndpoints(ctx, relations); err != nil {
