@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // ModelGroupService 模型分组服务接口
@@ -74,7 +76,16 @@ func (s *modelGroupService) Update(ctx context.Context, group domain.ModelGroup)
 		group.SortOrder = existing.SortOrder
 	}
 
-	return s.groupRepo.Update(ctx, group)
+	if err := s.groupRepo.Update(ctx, group); err != nil {
+		// 读快照到写入之间分组被删：DAO 用 MatchedCount==0 报告，这里翻成 404 语义。
+		// 该 read-modify-write 本身不带版本号，并发 PUT 仍是后写覆盖，
+		// 但至少「目标行已消失」不再伪装成成功。
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errs.ErrModelGroupNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *modelGroupService) Delete(ctx context.Context, uid string) error {

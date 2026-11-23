@@ -1,4 +1,4 @@
-﻿package dao
+package dao
 
 import (
 	"context"
@@ -66,8 +66,16 @@ func (d *ModelGroupDAO) Update(ctx context.Context, group ModelGroup) error {
 			"update_time": group.UpdateTime,
 		},
 	}
-	_, err := d.db.Collection(CollectionModelGroup).UpdateOne(ctx, filter, update)
-	return err
+	result, err := d.db.Collection(CollectionModelGroup).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	// 无匹配行 = 目标分组在 service 读完快照之后被删除。不返回错误会让接口回 200 成功，
+	// 前端刷新后数据「没变」，读者无法判断是并发删除还是请求被忽略。
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // Delete 删除模型分组

@@ -71,7 +71,7 @@ func TestModelUpdate_RejectsBlankFields(t *testing.T) {
 			t.Parallel()
 
 			repo := &recordingModelRepo{exists: true}
-			svc := NewModelService(repo, nil)
+			svc := NewModelService(repo, nil, nil)
 
 			model := base
 			tc.mut(&model)
@@ -92,7 +92,7 @@ func TestModelUpdate_TrimsBeforePersist(t *testing.T) {
 	t.Parallel()
 
 	repo := &recordingModelRepo{exists: true}
-	svc := NewModelService(repo, nil)
+	svc := NewModelService(repo, nil, nil)
 
 	err := svc.Update(context.Background(), domain.Model{
 		UID:      "  host  ",
@@ -122,7 +122,7 @@ func TestModelUpdate_AllowsEmptyCategory(t *testing.T) {
 	t.Parallel()
 
 	repo := &recordingModelRepo{exists: true}
-	svc := NewModelService(repo, nil)
+	svc := NewModelService(repo, nil, nil)
 
 	err := svc.Update(context.Background(), domain.Model{UID: "host", Name: "主机", Category: ""})
 	if err != nil {

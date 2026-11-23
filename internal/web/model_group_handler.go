@@ -84,10 +84,12 @@ func (h *ModelGroupHandler) Create(ctx *gin.Context) {
 		return
 	}
 
-	// 裁剪首尾空白：gin 的 binding:"required" 不拦纯空白，实测 " " 能建出一个没有标识的空分组。
+	// 裁剪交给 service（normalizeModelGroup）：gin 的 binding:"required" 不拦纯空白，
+	// 实测 " " 能建出一个没有标识的空分组。handler 只做字段搬运，批量路径与内部调用
+	// 也能因此获得同一套裁剪，不会出现「改走 service 就被绕过」。
 	group := domain.ModelGroup{
-		UID:         strings.TrimSpace(req.UID),
-		Name:        strings.TrimSpace(req.Name),
+		UID:         req.UID,
+		Name:        req.Name,
 		Icon:        req.Icon,
 		SortOrder:   req.SortOrder,
 		Description: req.Description,

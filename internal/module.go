@@ -64,7 +64,8 @@ func InitModule(db *mongox.Mongo) *Module {
 	// syncQualityIssueRepo 用于同步链路「记录但不阻断」写入问题清单；
 	// changeHistoryRepo 用于实例变更审计（变更前后值写入 ecam_change_history）
 	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo, changeHistoryRepo)
-	modelSvc := service.NewModelService(modelRepo, instanceRepo)
+	// modelGroupRepo：Update 时校验 model_group_id 指向真实分组（0 = 归入未分组，负数拒绝）
+	modelSvc := service.NewModelService(modelRepo, instanceRepo, modelGroupRepo)
 	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo)

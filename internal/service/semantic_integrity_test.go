@@ -213,6 +213,7 @@ func TestModelDelete_HasInstances(t *testing.T) {
 	svc := NewModelService(
 		&fakeModelRepo{exists: true},
 		&semanticInstanceRepo{count: 3},
+		nil,
 	)
 
 	err := svc.Delete(context.Background(), "m1")
@@ -223,7 +224,7 @@ func TestModelDelete_HasInstances(t *testing.T) {
 
 func TestModelDelete_NoInstances(t *testing.T) {
 	modelRepo := &fakeModelRepo{exists: true}
-	svc := NewModelService(modelRepo, &semanticInstanceRepo{count: 0})
+	svc := NewModelService(modelRepo, &semanticInstanceRepo{count: 0}, nil)
 
 	if err := svc.Delete(context.Background(), "m1"); err != nil {
 		t.Fatalf("Delete() error = %v, want nil", err)

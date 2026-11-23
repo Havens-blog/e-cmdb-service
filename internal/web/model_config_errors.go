@@ -46,6 +46,7 @@ func modelConfigErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, errs.ErrInvalidModelGroupName):
 		return ErrorResultWithMsg(errs.ModelGroupInvalid, "分组名称不能为空"), true
 	case errors.Is(err, errs.ErrModelGroupInvalid):
+		// 生产触发点：UpdateModelReq.model_group_id 传负数（0 表示「归入未分组」）。
 		return ErrorResultWithMsg(errs.ModelGroupInvalid, "分组信息无效，请检查后重试"), true
 	case errors.Is(err, errs.ErrModelGroupNotFound):
 		return ErrorResultWithMsg(errs.ModelGroupNotFound, "模型分组不存在或已被删除，请刷新后重试"), true
@@ -74,7 +75,7 @@ func modelConfigErrorStatus(code int) int {
 	switch code {
 	case errs.ModelNotFound.Code, errs.ModelGroupNotFound.Code:
 		return http.StatusNotFound
-	case errs.ModelExists.Code, errs.ModelGroupExists.Code, errs.GroupHasModels.Code:
+	case errs.ModelExists.Code, errs.ModelGroupExists.Code, errs.GroupHasModels.Code, errs.ModelHasInstances.Code:
 		return http.StatusConflict
 	default:
 		return http.StatusBadRequest

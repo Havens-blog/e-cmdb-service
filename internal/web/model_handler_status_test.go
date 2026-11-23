@@ -110,7 +110,7 @@ func TestModelConfigErrorStatus(t *testing.T) {
 		{"model exists", errs.ModelExists.Code, http.StatusConflict},
 		{"group exists", errs.ModelGroupExists.Code, http.StatusConflict},
 		{"group has models", errs.GroupHasModels.Code, http.StatusConflict},
-		{"model has instances", errs.ModelHasInstances.Code, http.StatusBadRequest},
+		{"model has instances", errs.ModelHasInstances.Code, http.StatusConflict},
 		{"builtin cannot delete", errs.CannotDeleteBuiltin.Code, http.StatusBadRequest},
 		{"model invalid", errs.ModelInvalid.Code, http.StatusBadRequest},
 	}
