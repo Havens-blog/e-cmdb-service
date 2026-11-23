@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/gotomicro/ego/core/elog"
 
@@ -99,8 +100,19 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 		idsByTenant[rel.TenantID] = append(idsByTenant[rel.TenantID], rel.SourceInstanceID, rel.TargetInstanceID)
 	}
 	typeCache := make(map[string]domain.ModelRelationType, len(relations))
-	for tenantID, ids := range idsByTenant {
-		models, err := s.loadEndpointModels(ctx, tenantID, ids)
+	// 按 tenantID 升序遍历：map 迭代顺序随机，会让「批量里哪一条先被拒绝」跨请求不稳定，
+	// 同一个请求体两次调用可能返回不同的实例 id，前端无法复现、测试也无法断言。
+	tenantIDs := make([]int64, 0, len(idsByTenant))
+	for tenantID := range idsByTenant {
+		tenantIDs = append(tenantIDs, tenantID)
+	}
+	sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
+	// typeCache 刻意是「每请求一份」而不是挂在 service 上长期缓存：关系类型的
+	// source/target 模型是可编辑元数据，跨请求缓存会把刚修好的关系类型继续按旧声明校验。
+	// 单请求内已按 uid 去重，批量里重复引用同一类型只查一次；若将来批量规模显著变大，
+	// 再考虑带失效信号的缓存，而不是直接加长生命周期。
+	for _, tenantID := range tenantIDs {
+		models, err := s.loadEndpointModels(ctx, tenantID, idsByTenant[tenantID])
 		if err != nil {
 			return err
 		}
