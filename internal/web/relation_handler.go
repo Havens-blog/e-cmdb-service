@@ -191,12 +191,16 @@ func (h *RelationHandler) CreateModelRelation(ctx *gin.Context, req CreateModelR
 //   - ErrRelationExists：仅 Create 可达（uid 查重）。Update 目前不做 (源,目标,类型) 三元组查重，
 //     所以编辑时把一条类型改成与另一条同名同向的定义不会被拦；这里保留分支，
 //     待 Update 增加三元组查重后自动生效。
-//   - 源/目标模型不存在、UID/名称/模型为空、ErrRelationNotFound：Create 与 Update 均可达。
+//   - ErrRelationNotFound：仅 Get/Update/Delete 可达（Create 先 Exists 查重，不会走到该哨兵）。
+//   - 源/目标模型不存在、UID/名称/模型为空：Create 与 Update 均可达
+//     （Update 侧仅当本次改动了对应的模型引用时才会校验，见 service.ensureChangedModelsExist）。
 func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
 	switch {
 	case errors.Is(err, errs.ErrRelationExists):
+		// 查重口径是 UID（repo.Exists(ctx, rel.UID)），不是 (源,目标,类型) 三元组，
+		// 文案不能承诺实现没有做的规则——否则用户会以为「换个 UID 就能重复定义」被系统允许。
 		return ErrorResultWithMsg(errs.RelationExists,
-			"该关系类型已存在：源模型、目标模型与关系类型不能重复定义"), true
+			"该关系类型已存在：关系类型的 UID 不能重复，请换一个标识"), true
 	case errors.Is(err, errs.ErrRelationSourceModelNotFound):
 		return ErrorResultWithMsg(errs.RelationSourceModelNotFound,
 			"源模型不存在或已被删除，请刷新模型列表后重新选择"), true
@@ -206,7 +210,10 @@ func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, domain.ErrInvalidRelationTypeUID):
 		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型标识（UID）不能为空"), true
 	case errors.Is(err, domain.ErrInvalidRelationName):
-		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型名称不能为空"), true
+		// Update 是「合并后的完整对象」：若库里的历史名称是空白（本 PR 修复前可写入 " "），
+		// 只改描述的 PUT 也会命中这里。提示里要点明这一可能，否则用户会反复重试同一请求。
+		return ErrorResultWithMsg(errs.RelationInvalid,
+			"关系类型名称不能为空：若该关系类型的历史名称为空白，请在本次编辑中一并填写名称"), true
 	case errors.Is(err, domain.ErrInvalidRelationModel):
 		return ErrorResultWithMsg(errs.RelationInvalid, "源模型与目标模型都必须选择"), true
 	case errors.Is(err, errs.ErrRelationNotFound):
@@ -288,6 +295,9 @@ func (h *RelationHandler) UpdateModelRelation(ctx *gin.Context, req UpdateModelR
 	// 四个字段用同一套规则（裁剪 → 判空 → 覆盖），原因分别是：
 	// - Name 裁后为空：用户其实想清空名称，但名称是必填项，覆盖后会由 Validate 拒绝；
 	//   忽略它、保留旧名才是「部分更新」的正确语义，不误伤只想改描述的调用。
+	//   注意这里只覆盖「请求里的空值」：若库里存的旧名本身就是空白（本 PR 修复前可写入 " "），
+	//   保留下来后会由 domain.Validate 拒绝并返回「关系类型名称不能为空」——
+	//   即部分更新对正常数据宽容、对历史脏数据要求顺带修正，这是刻意的（见 Update 契约注释）。
 	// - SourceToTarget / TargetToSource 会作为拓扑边的双向标签展示，
 	//   Description 会在详情里展示；若按「非空即写入原始串」处理，
 	//   用户传 "   " 就会把标签改成一片空白，与 Name 的处理口径也不一致。

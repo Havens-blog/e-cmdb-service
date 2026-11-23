@@ -51,8 +51,12 @@ func modelsWith(uids ...string) *refModelRepo {
 }
 
 // refRelationRepo 记录 Create 是否被调用，用来证明「校验失败时不落库」。
+//
+// stored 用于模拟库里的既有行：Update 的引用校验是「按本次改动的边逐侧执行」，
+// 需要与库中值比对才能判断某侧到底有没有变（见 service.ensureChangedModelsExist）。
 type refRelationRepo struct {
 	existing  map[string]bool
+	stored    *domain.ModelRelationType
 	created   []domain.ModelRelationType
 	updated   []domain.ModelRelationType
 	createErr error
@@ -68,6 +72,9 @@ func (f *refRelationRepo) Create(_ context.Context, rel domain.ModelRelationType
 }
 
 func (f *refRelationRepo) GetByUID(_ context.Context, uid string) (domain.ModelRelationType, error) {
+	if f.stored != nil {
+		return *f.stored, nil
+	}
 	return domain.ModelRelationType{UID: uid, ID: 1}, nil
 }
 
@@ -358,5 +365,62 @@ func TestUpdateRelationType_UnknownUIDIsNotFound(t *testing.T) {
 	}
 	if len(rels.updated) != 0 {
 		t.Fatalf("不存在的关系类型不应落库")
+	}
+}
+
+// TestUpdateRelationType_LegacyDanglingRefStillEditable 回归（评审 R6，high）：
+// 存量脏数据 ecs_belong_to_vpc 的源模型 cloud_ecs 已被删除，而 UpdateModelRelationReq
+// 至今没有 SourceModelUID/TargetModelUID 字段。若 Update 无条件校验两侧引用，
+// 「只改描述」的 PUT 也会 400011 失败，且请求里没有任何字段能指向合法模型 ——
+// 这条关系类型就永久不可编辑。口径改为「只校验本次改动的边」。
+func TestUpdateRelationType_LegacyDanglingRefStillEditable(t *testing.T) {
+	legacy := domain.ModelRelationType{
+		ID:             1,
+		UID:            "ecs_belong_to_vpc",
+		Name:           "ECS属于VPC",
+		SourceModelUID: "cloud_ecs", // 该模型已不存在
+		TargetModelUID: "cloud_vpc",
+	}
+	rels := &refRelationRepo{
+		existing: map[string]bool{"ecs_belong_to_vpc": true},
+		stored:   &legacy,
+	}
+	// 只存在 cloud_vpc；cloud_ecs 已删除
+	svc := newRefService(modelsWith("cloud_vpc"), rels)
+
+	want := legacy
+	want.Description = "补充说明"
+	if err := svc.Update(context.Background(), want); err != nil {
+		t.Fatalf("引用未改动的历史脏数据应可编辑描述，实际 err = %v", err)
+	}
+	if len(rels.updated) != 1 || rels.updated[0].Description != "补充说明" {
+		t.Fatalf("应写入 1 条更新，实际 %+v", rels.updated)
+	}
+}
+
+// TestUpdateRelationType_RejectsChangedDanglingRef 反向约束：
+// 一旦本次改动把某一侧指向不存在的模型，仍必须拦住（只放宽未改动的边）。
+func TestUpdateRelationType_RejectsChangedDanglingRef(t *testing.T) {
+	origin := domain.ModelRelationType{
+		ID:             1,
+		UID:            "ecs_disk",
+		Name:           "云服务器挂载云盘",
+		SourceModelUID: "ecs",
+		TargetModelUID: "disk",
+	}
+	rels := &refRelationRepo{
+		existing: map[string]bool{"ecs_disk": true},
+		stored:   &origin,
+	}
+	svc := newRefService(modelsWith("ecs"), rels)
+
+	changed := origin
+	changed.TargetModelUID = "zz_no_such_target"
+	err := svc.Update(context.Background(), changed)
+	if !errors.Is(err, errs.ErrRelationTargetModelNotFound) {
+		t.Fatalf("改动后的目标模型不存在应被拒绝，实际 err = %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("校验失败不应写入，实际 %d 条", len(rels.updated))
 	}
 }

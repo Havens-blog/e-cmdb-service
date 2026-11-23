@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+
+	"github.com/gotomicro/ego/core/elog"
+
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
-	"github.com/gotomicro/ego/core/elog"
 )
 
 // ModelRelationTypeService 模型关系类型服务接口
@@ -74,26 +76,39 @@ func (s *modelRelationTypeService) Create(ctx context.Context, rel domain.ModelR
 // 关系类型是「哪些模型之间可以建立关系」的声明，声明本身指向不存在的模型时，
 // 实例关系页会按该 uid 检索资产，候选恒为 0，用户只能看到「没有匹配的资产」而不知原因。
 func (s *modelRelationTypeService) ensureModelsExist(ctx context.Context, sourceModelUID, targetModelUID string) error {
+	if err := s.ensureSourceModelExists(ctx, sourceModelUID); err != nil {
+		return err
+	}
+	return s.ensureTargetModelExists(ctx, targetModelUID)
+}
+
+func (s *modelRelationTypeService) ensureSourceModelExists(ctx context.Context, sourceModelUID string) error {
 	if s.modelRepo == nil {
 		return nil
 	}
-
-	source, err := s.modelRepo.GetByUID(ctx, sourceModelUID)
+	model, err := s.modelRepo.GetByUID(ctx, sourceModelUID)
 	if err != nil {
-		return fmt.Errorf("failed to load source model %s: %w", sourceModelUID, err)
+		// 不把 uid 拼进错误：这条最终会被 handler 兜成 5xx 用户可见文案，
+		// 原始驱动错误已经由 %w 保留给日志，没必要把标识泄漏到响应里。
+		return fmt.Errorf("failed to load relation source model: %w", err)
 	}
-	if source.ID == 0 {
+	if model.ID == 0 {
 		return fmt.Errorf("%w: model_uid=%s", errs.ErrRelationSourceModelNotFound, sourceModelUID)
 	}
+	return nil
+}
 
-	target, err := s.modelRepo.GetByUID(ctx, targetModelUID)
-	if err != nil {
-		return fmt.Errorf("failed to load target model %s: %w", targetModelUID, err)
+func (s *modelRelationTypeService) ensureTargetModelExists(ctx context.Context, targetModelUID string) error {
+	if s.modelRepo == nil {
+		return nil
 	}
-	if target.ID == 0 {
+	model, err := s.modelRepo.GetByUID(ctx, targetModelUID)
+	if err != nil {
+		return fmt.Errorf("failed to load relation target model: %w", err)
+	}
+	if model.ID == 0 {
 		return fmt.Errorf("%w: model_uid=%s", errs.ErrRelationTargetModelNotFound, targetModelUID)
 	}
-
 	return nil
 }
 
@@ -148,13 +163,45 @@ func (s *modelRelationTypeService) Update(ctx context.Context, rel domain.ModelR
 		return errs.ErrRelationNotFound
 	}
 
-	// 与 Create 同一套引用校验：否则 PUT 仍能把一条合法类型改成指向已删除的模型，
-	// 结果与新增时拦截、编辑时放行的口径不一致（存量 ecs_belong_to_vpc→cloud_ecs 即此形态）。
-	if err := s.ensureModelsExist(ctx, rel.SourceModelUID, rel.TargetModelUID); err != nil {
+	if err := s.ensureChangedModelsExist(ctx, rel); err != nil {
 		return err
 	}
 
 	return s.repo.Update(ctx, rel)
+}
+
+// ensureChangedModelsExist 只校验本次真正改动的那一侧模型引用。
+//
+// 与 Create 的区别：Create 校验整条声明（用户正在写这两个值），Update 面对的是**已存在**的行，
+// 而 UpdateModelRelationReq 至今不能改 SourceModelUID/TargetModelUID。若这里无条件地校验两侧，
+// 存量脏数据（实测但未修：ecs_belong_to_vpc → cloud_ecs，cloud_ecs 模型已不存在）
+// 就连「只改描述」都会 400011 失败，而请求里根本没有可指向合法模型的字段——
+// 等于把历史债务变成了永久不可编辑，比留下脏数据更糟。
+//
+// 因此口径改为「只校验本次写入的值」：某一侧与库中一致即视为未改动、跳过校验；
+// 某侧被改动（现在只能来自程序化调用，将来开放编辑后来自 HTTP）则必须存在。
+// 读库失败时保守回落到「两侧都校验」——宁可拦住也不放行未知状态。
+func (s *modelRelationTypeService) ensureChangedModelsExist(ctx context.Context, rel domain.ModelRelationType) error {
+	if s.modelRepo == nil {
+		return nil
+	}
+
+	stored, err := s.repo.GetByUID(ctx, rel.UID)
+	if err != nil || stored.ID == 0 {
+		return s.ensureModelsExist(ctx, rel.SourceModelUID, rel.TargetModelUID)
+	}
+
+	if rel.SourceModelUID != stored.SourceModelUID {
+		if err := s.ensureSourceModelExists(ctx, rel.SourceModelUID); err != nil {
+			return err
+		}
+	}
+	if rel.TargetModelUID != stored.TargetModelUID {
+		if err := s.ensureTargetModelExists(ctx, rel.TargetModelUID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *modelRelationTypeService) Delete(ctx context.Context, uid string) error {

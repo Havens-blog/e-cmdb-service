@@ -55,6 +55,11 @@ type ModelRelationTypeFilter struct {
 // 直接调 Validate 的路径就会把 " " 当成合法名称落库。与 Instance.Normalize
 // 一样把「文本字段如何取值」的规则收在领域层，调用方无需各自记得先裁剪。
 //
+// 与 Instance 的差异（易被误读为等价）：Instance.Normalize 由 service 显式调用，
+// 而这里的裁剪切在 Validate 内部，所以 **Validate 是唯一入口**——任何新增的
+// 「不校验只落库」路径（如批量导入、数据修复脚本直接写仓储）都必须自己先调
+// Normalize，否则会绕过裁剪。
+//
 // SourceToTarget / TargetToSource 会作为拓扑边的双向标签展示，
 // Description 会在详情里展示，三者与 Name 同属可选描述性文本，
 // 因此用同一套规则（首尾空白裁掉），避免出现"看得见但全是空格"的标签。
