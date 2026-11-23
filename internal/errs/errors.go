@@ -24,6 +24,10 @@ var (
 	// RelationTypeInUse：模型关系类型仍被资产关系引用。
 	// 与 ModelHasInstances 同族（400 段），前端按 code 判 4xx 即可提示。
 	RelationTypeInUse = ErrorCode{Code: 400010, Msg: "relation type is in use by instance relations, cannot delete"}
+	// AttributeInUse：字段仍被实例数据使用，不能删除。
+	// 与 ModelHasInstances / RelationTypeInUse 同族（「被引用不可删」语义）。
+	// 注：400011–400013 已被在途分支预留（关系类型引用的源/目标模型不存在、实例关系模型对不匹配）。
+	AttributeInUse = ErrorCode{Code: 400014, Msg: "attribute in use by instances, cannot delete"}
 )
 
 // 实例相关错误码
@@ -85,6 +89,8 @@ var (
 
 	ErrAttributeNotFound = errors.New("attribute not found")
 	ErrAttributeExists   = errors.New("attribute already exists")
+	// ErrAttributeInUse 由 service.AttributeInUseError 通过 Is 方法匹配。
+	ErrAttributeInUse = errors.New("attribute in use by instances")
 
 	ErrModelGroupNotFound  = errors.New("model group not found")
 	ErrModelGroupExists    = errors.New("model group already exists")

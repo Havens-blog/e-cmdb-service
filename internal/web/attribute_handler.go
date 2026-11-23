@@ -58,6 +58,12 @@ func (h *AttributeHandler) RegisterRoutes(r *gin.RouterGroup) {
 //
 // 这里按「用户看得懂 + 告诉用户怎么改」的原则统一翻译，调用点只负责判断 ok。
 func attributeErrorResult(err error) (ginx.Result, bool) {
+	// 被实例数据使用的字段不能删：文案带「仍有多少个实例在用」，由 service 的类型化错误携带，
+	// 这里只负责落到 400014（与关系类型被引用时的处理方式一致）。
+	var inUse *service.AttributeInUseError
+	if errors.As(err, &inUse) {
+		return ErrorResultWithMsg(errs.AttributeInUse, inUse.Error()), true
+	}
 	switch {
 	case errors.Is(err, errs.ErrModelNotFound):
 		return ErrorResultWithMsg(errs.ModelNotFound, "模型不存在或已被删除，请刷新后重试"), true

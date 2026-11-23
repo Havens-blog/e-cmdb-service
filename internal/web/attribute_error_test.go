@@ -2,10 +2,12 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
+	"github.com/Havens-blog/e-cmdb-service/internal/service"
 )
 
 // TestAttributeErrorResult 锁住「业务拒绝必须有中文可读原因」这条约束。
@@ -93,6 +95,40 @@ func TestAttributeErrorResult(t *testing.T) {
 			}
 			if !containsChinese(result.Msg) {
 				t.Errorf("msg = %q 不含中文", result.Msg)
+			}
+		})
+	}
+}
+
+// TestAttributeErrorResult_AttributeInUse 字段仍被实例数据使用时，落到 400014，
+// 且文案携带 service 算出的实例数（用户据此知道要先处理多少条数据）。
+// 包装过的错误也要能命中：errors.As 会沿 Unwrap 链查找类型化错误。
+func TestAttributeErrorResult_AttributeInUse(t *testing.T) {
+	cases := []struct {
+		name  string
+		err   error
+		count string
+	}{
+		{name: "直接返回", err: &service.AttributeInUseError{ModelUID: "host", FieldUID: "status", Count: 3}, count: "3 个实例"},
+		{name: "被包装", err: fmt.Errorf("delete attribute: %w", &service.AttributeInUseError{ModelUID: "host", FieldUID: "status", Count: 12}), count: "12 个实例"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, ok := attributeErrorResult(tc.err)
+			if !ok {
+				t.Fatalf("attributeErrorResult(%v) 未命中，期望被翻译", tc.err)
+			}
+			if result.Code != errs.AttributeInUse.Code {
+				t.Errorf("code = %d, want %d", result.Code, errs.AttributeInUse.Code)
+			}
+			if !strings.Contains(result.Msg, tc.count) {
+				t.Errorf("msg = %q, 期望包含 %q", result.Msg, tc.count)
+			}
+			if !strings.Contains(result.Msg, "无法删除") && !strings.Contains(result.Msg, "删除后这些数据将不再显示") {
+				t.Errorf("msg = %q, 期望说明删除后果", result.Msg)
+			}
+			if got := attributeErrorStatus(result); got != 400 {
+				t.Errorf("字段被使用 status = %d, want 400", got)
 			}
 		})
 	}

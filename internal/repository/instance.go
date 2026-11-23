@@ -37,6 +37,9 @@ type InstanceRepository interface {
 	ListMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string, offset, limit int64) ([]MissingFieldInstanceView, error)
 	// CountMissingAttribute 统计某模型下缺少指定属性的实例数（服务端过滤）
 	CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error)
+	// CountByAttributeKey 统计某模型下 attributes.<field_uid> 已有非空值的实例数（跨租户），
+	// 供删除字段前的「被使用」保护使用
+	CountByAttributeKey(ctx context.Context, modelUID, fieldUID string) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance domain.Instance) error
@@ -164,6 +167,11 @@ func (r *instanceRepository) Facets(ctx context.Context, tenantID int64) (*domai
 // CountMissingAttribute 统计某模型下缺少指定属性的实例数。
 func (r *instanceRepository) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
 	return r.dao.CountMissingAttribute(ctx, tenantID, modelUID, fieldUID)
+}
+
+// CountByAttributeKey 统计某模型下 attributes.<field_uid> 已有非空值的实例数（跨租户）。
+func (r *instanceRepository) CountByAttributeKey(ctx context.Context, modelUID, fieldUID string) (int64, error) {
+	return r.dao.CountByAttributeKey(ctx, modelUID, fieldUID)
 }
 
 func (r *instanceRepository) Delete(ctx context.Context, tenantID int64, id int64) error {

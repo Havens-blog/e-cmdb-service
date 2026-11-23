@@ -71,7 +71,9 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo, relationRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)
-	attributeSvc := service.NewAttributeService(attributeRepo, attributeGroupRepo, modelRepo)
+	// attributeSvc：instanceRepo 用于删除字段前统计「仍在使用该字段」的实例数（被使用则拒绝删除，
+	// 避免实例属性值静默残留成所有面都不可见的数据）
+	attributeSvc := service.NewAttributeService(attributeRepo, attributeGroupRepo, modelRepo, instanceRepo)
 	qualitySvc := service.NewQualityService(instanceRepo, modelRepo, relationRepo, attributeRepo, syncQualityIssueRepo)
 	openAPISvc := service.NewOpenAPIService(apiTokenRepo, webhookRepo)
 	impactSvc := service.NewImpactService(instanceRepo, relationRepo)

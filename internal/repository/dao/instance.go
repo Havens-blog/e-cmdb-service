@@ -147,6 +147,8 @@ type InstanceDAO interface {
 	ListMissingFieldGroup(ctx context.Context, tenantID int64, modelUID, fieldUID string, offset, limit int64) ([]MissingFieldInstance, error)
 	// CountMissingAttribute 统计某模型下缺少指定属性的实例数（服务端过滤）
 	CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error)
+	// CountByAttributeKey 统计某模型下 attributes.<field_uid> 已有非空值的实例数（跨租户）
+	CountByAttributeKey(ctx context.Context, modelUID, fieldUID string) (int64, error)
 	Delete(ctx context.Context, tenantID int64, id int64) error
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	Upsert(ctx context.Context, instance Instance) error
@@ -498,6 +500,23 @@ func (d *instanceDAO) CountMissingAttribute(ctx context.Context, tenantID int64,
 		"tenant_id":              tenantID,
 		"model_uid":              modelUID,
 		"attributes." + fieldUID: bson.M{"$exists": false},
+	}
+	return d.db.Collection(InstanceCollection).CountDocuments(ctx, query)
+}
+
+// CountByAttributeKey 统计某模型下 attributes.<field_uid> 已有非空值的实例数（跨租户）。
+//
+// 用途：删除模型字段前的「被使用」保护（对齐删除模型/分组的在用拦截）。
+// 字段定义是全局的（ecam_attribute 无租户维度），任一租户的实例在用都应阻止删除，
+// 因此这里不做 tenant_id 过滤 —— 与删除关系类型前统计在用资产关系的口径一致。
+// 判定口径：键存在且值非 null（空串/空数组视为已填写，与「字段有值」直觉一致）。
+func (d *instanceDAO) CountByAttributeKey(ctx context.Context, modelUID, fieldUID string) (int64, error) {
+	if modelUID == "" || fieldUID == "" {
+		return 0, nil
+	}
+	query := bson.M{
+		"model_uid":              modelUID,
+		"attributes." + fieldUID: bson.M{"$exists": true, "$ne": nil},
 	}
 	return d.db.Collection(InstanceCollection).CountDocuments(ctx, query)
 }

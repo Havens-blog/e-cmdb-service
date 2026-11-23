@@ -38,6 +38,8 @@ type attributeService struct {
 	attrRepo      repository.AttributeRepository
 	attrGroupRepo repository.AttributeGroupRepository
 	modelRepo     repository.ModelRepository
+	// instanceRepo 用于删除字段前统计「仍在使用该字段」的实例数（被使用则拒绝删除）。
+	instanceRepo repository.InstanceRepository
 }
 
 // NewAttributeService 创建属性服务
@@ -45,11 +47,13 @@ func NewAttributeService(
 	attrRepo repository.AttributeRepository,
 	attrGroupRepo repository.AttributeGroupRepository,
 	modelRepo repository.ModelRepository,
+	instanceRepo repository.InstanceRepository,
 ) AttributeService {
 	return &attributeService{
 		attrRepo:      attrRepo,
 		attrGroupRepo: attrGroupRepo,
 		modelRepo:     modelRepo,
+		instanceRepo:  instanceRepo,
 	}
 }
 
@@ -134,13 +138,45 @@ func (s *attributeService) UpdateAttribute(ctx context.Context, attr domain.Attr
 // nil 会让接口对不存在的 id 回 200 success —— 前端据此提示「删除成功」，
 // 用户以为删掉了、刷新后又出现（或对象本就不存在却被告知成功）。
 // 与 DeleteAttributeGroup 的存在性检查保持一致，缺失时统一返回 ErrAttributeNotFound。
+//
+// 使用保护：字段已有实例数据时拒绝删除。字段定义删除后，实例文档里的
+// attributes.<field_uid> 值会残留但不再被任何面渲染（表单/详情按字段定义生成，
+// 质量页的 field-issues 也按定义判定）—— 实测（iter274）删除后值仍在库里且
+// 各处不可见，重建同 field_uid 字段时旧值会「复活」。为避免这种静默数据残留，
+// 对齐「删除仍有实例的模型 / 删除仍有模型的分组 / 删除被引用的关系类型」的既有语义。
 func (s *attributeService) DeleteAttribute(ctx context.Context, id int64) error {
 	existing, err := s.attrRepo.GetByID(ctx, id)
 	if err != nil || existing.ID == 0 {
 		return errs.ErrAttributeNotFound
 	}
 
+	if s.instanceRepo != nil {
+		count, err := s.instanceRepo.CountByAttributeKey(ctx, existing.ModelUID, existing.FieldUID)
+		if err != nil {
+			return fmt.Errorf("failed to check attribute usage: %w", err)
+		}
+		if count > 0 {
+			return &AttributeInUseError{ModelUID: existing.ModelUID, FieldUID: existing.FieldUID, Count: count}
+		}
+	}
+
 	return s.attrRepo.Delete(ctx, id)
+}
+
+// AttributeInUseError 表示字段仍被实例数据使用，不能删除。
+type AttributeInUseError struct {
+	ModelUID string
+	FieldUID string
+	Count    int64
+}
+
+func (e *AttributeInUseError) Error() string {
+	return fmt.Sprintf("该字段仍被 %d 个实例填写了数据，删除后这些数据将不再显示；请先处理这些实例数据，或保留字段", e.Count)
+}
+
+// Is 让 errors.Is(err, errs.ErrAttributeInUse) 成立，便于上层统一判定。
+func (e *AttributeInUseError) Is(target error) bool {
+	return target == errs.ErrAttributeInUse
 }
 
 // CreateAttributeGroup 创建属性分组

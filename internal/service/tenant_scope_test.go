@@ -29,6 +29,10 @@ type fakeInstanceRepo struct {
 	// createBatchErrCount 与 createBatchErr 搭配：模拟「有序批量插入中途失败」时
 	// 已经写入的条数（DAO 在 BulkWriteException 上会返回失败点下标）。
 	createBatchErrCount int64
+	// attributeUsage / attributeUsageErr 可选：驱动 CountByAttributeKey 的返回值
+	//（attribute 删除保护用例使用；为 nil 时返回 0, nil，不影响既有测试）。
+	attributeUsage    *int64
+	attributeUsageErr error
 }
 
 func newFakeInstanceRepo() *fakeInstanceRepo {
@@ -101,6 +105,15 @@ func (f *fakeInstanceRepo) Facets(ctx context.Context, tenantID int64) (*domain.
 
 // CountMissingAttribute 桩实现：数据质量服务端的缺失字段计数（测试中不使用）
 func (f *fakeInstanceRepo) CountMissingAttribute(ctx context.Context, tenantID int64, modelUID, fieldUID string) (int64, error) {
+	return 0, nil
+}
+
+// CountByAttributeKey 桩实现：删除字段前的「被使用」计数。
+// 可通过 attributeUsage 字段固定返回值（attribute 删除保护用例使用）。
+func (f *fakeInstanceRepo) CountByAttributeKey(ctx context.Context, modelUID, fieldUID string) (int64, error) {
+	if f.attributeUsage != nil {
+		return *f.attributeUsage, f.attributeUsageErr
+	}
 	return 0, nil
 }
 
