@@ -308,8 +308,10 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 		return ErrorResultWithMsg(errs.RelationModelMismatch,
 			"所选关系类型要求固定的资产类型组合，当前源资产或目标资产的类型不符合，请重新选择"), true
 	case errors.Is(err, errs.ErrInvalidTenantID):
-		// 会话未选择租户时 tenant_id=0。此前会退化成跨租户读取并把关系写成 tenant_id=0，
-		// 属于越权读 + 无归属写入，这里明确拒绝而不是让 DAO 的「tenantID>0 才加谓词」兜着。
+		// 会话未选择租户时 tenant_id=0，DAO 在 tenantID<=0 时不加租户谓词，
+		// 直接放行会变成跨租户读取 + 无归属写入。
+		// 本路由已挂 middleware.RequireTenant，正常请求到不了这里；此分支保护的是
+		// 不走中间件的直接 service 调用方（定时推导、运维脚本），因此是前瞻性映射而非补洞。
 		return ErrorResultWithMsg(errs.ParamsError,
 			"未选择租户，无法操作实例关系；请先切换到具体租户后重试"), true
 	case errors.Is(err, errs.ErrModelRelationTypeNotFound):

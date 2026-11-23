@@ -65,8 +65,11 @@ func InitModule(db *mongox.Mongo) *Module {
 	// changeHistoryRepo 用于实例变更审计（变更前后值写入 ecam_change_history）
 	instanceSvc := service.NewInstanceService(instanceRepo, modelRepo, attributeRepo, relationRepo, syncQualityIssueRepo, changeHistoryRepo)
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
-	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系；
-	// 注入 modelRelRepo：创建关系前校验两端实例的模型符合关系类型声明的模型对
+	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系，并为模型对校验提供
+	// 端点实例的 model_uid；注入 modelRelRepo：创建/批量创建/推导三条写入路径共用同一套
+	// 「两端模型必须符合关系类型声明」的校验。
+	// 注意 modelRelRepo 传 nil 会**静默关闭**该校验（构造函数允许 nil，仅为兼容既有单测的
+	// 降级路径），生产装配不允许传 nil。
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo, modelRelRepo)
 	// instRelRepo（relationRepo）：删除模型关系类型前统计在用资产关系（跨租户），用于删除保护
 	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo, relationRepo)

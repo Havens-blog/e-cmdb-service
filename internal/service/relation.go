@@ -53,8 +53,9 @@ func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo
 // 而 instanceDAO.ListByIDs 只在 tenantID > 0 时才追加租户谓词。于是 tenant_id=0 的
 // 创建请求会跨所有租户加载实例做校验，并把关系持久化成 tenant_id=0——
 // 既读到了不该读的数据，也写入了一条谁都不归属的关系。
-// DeriveInstanceRelations 早就在 handler 层拒绝 0，这里把同一约束下沉到 service，
-// 让直接调用 service 的内部路径也受保护。
+// 全部写入入口（Create / CreateBatch / DeriveRelations）都必须先过这道守卫；
+// handler 层的 RequireTenant 只保护 HTTP 路由，直接调用 service 的内部路径
+// （如定时推导、运维脚本）没有中间件兜底，不能指望它是安全的。
 func requireSelectedTenant(tenantID int64) error {
 	if tenantID <= 0 {
 		return fmt.Errorf("%w: tenant_id=%d", errs.ErrInvalidTenantID, tenantID)
@@ -103,10 +104,15 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 	if len(relations) == 0 {
 		return nil
 	}
+	// instanceRepo 缺失时端点存在性与模型对都无从校验。这是「静默关闭本 PR 新增约束」的
+	// 降级路径，必须留痕：早前空声明分支已经会 Warn，同类「无法校验」不应一个出声一个不出声。
+	if s.instanceRepo == nil {
+		s.logger.Warn("未注入实例仓储，跳过关系端点的存在性与模型对校验")
+	}
 	// 模型对校验依赖端点实例的 model_uid，因此 instanceRepo 缺失时两种校验都无从进行，
 	// 统一在这里跳过（原先 modelRelRepo 的 nil 兜底散落在 validateModelPair 里，
 	// 一旦 instanceRepo 为 nil 而 modelRelRepo 非 nil，就会拿空 models 表比对，
-	// 得到 actual=-> 的 mismatch 并拒绝一切写入）。
+	// 得到 actual=-> 的 mismatch 并拒绝一切写入）。上面的 Warn 已把这次降级记录在案。
 	if s.instanceRepo == nil {
 		return nil
 	}
@@ -189,6 +195,27 @@ func (s *relationService) validateModelPair(
 	return fmt.Errorf("%w: relation_type=%s source_instance_id=%d target_instance_id=%d declared=%s->%s actual=%s->%s",
 		errs.ErrRelationModelMismatch, rel.RelationTypeUID, rel.SourceInstanceID, rel.TargetInstanceID,
 		relType.SourceModelUID, relType.TargetModelUID, sourceModel, targetModel)
+}
+
+// validateDeriveCandidate 用与 Create 相同的模型对规则校验一条推导候选。
+//
+// 推导候选的端点实例来自本方法刚读出的 ecs/disk 列表（同租户），因此不需要再查库，
+// 直接把 id→model_uid 传进来即可；两种依赖未注入时保持与 validateRelationEndpoints
+// 一致的降级语义（跳过校验），由调用方决定是否留痕。
+func (s *relationService) validateDeriveCandidate(
+	ctx context.Context,
+	c domain.RelationCandidate,
+	models map[int64]string,
+	cache map[string]domain.ModelRelationType,
+) error {
+	if s.instanceRepo == nil || s.modelRelRepo == nil {
+		return nil
+	}
+	return s.validateModelPair(ctx, domain.InstanceRelation{
+		SourceInstanceID: c.SourceInstanceID,
+		TargetInstanceID: c.TargetInstanceID,
+		RelationTypeUID:  c.RelationTypeUID,
+	}, models, cache)
 }
 
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {
@@ -345,6 +372,13 @@ func (s *relationService) DeriveRelations(
 ) (domain.DeriveResult, error) {
 	result := domain.DeriveResult{DryRun: dryRun}
 
+	// 推导是写入入口之一，必须与 Create/CreateBatch 过同一道租户守卫：
+	// tenant_id=0 会让 List 丢掉租户谓词、把关系写成无归属，这条路径没有
+	// handler 的 RequireTenant 兜底（定时任务/脚本会直接调用 service）。
+	if guardErr := requireSelectedTenant(tenantID); guardErr != nil {
+		return result, guardErr
+	}
+
 	if rule != "" && rule != "ecs_disk" {
 		return result, fmt.Errorf("%w: 不支持的推导规则 %q（当前仅支持 ecs_disk）", errs.ErrInvalidRelation, rule)
 	}
@@ -364,6 +398,35 @@ func (s *relationService) DeriveRelations(
 	}
 
 	candidates, stats := domain.DeriveEcsDisk(ecsList, diskList, "ecs_disk")
+
+	// 与 Create/CreateBatch 共用同一套模型对校验：**推导不是绕过校验的旁路**。
+	// 早前 DeriveRelations 直接 s.repo.Create，于是 POST 会拒绝的关系（关系类型声明被改、
+	// 或声明缺失）仍能被推导写进库，本 PR 想关掉的入口等于还开着。
+	// 语义选择：推导是批量修复动作，单条不合法只跳过该条并留痕，不整批回滚
+	// （整批拒绝会让一次元数据瑕疵阻断所有租户的正常推导）。
+	models := make(map[int64]string, len(ecsList)+len(diskList))
+	for _, inst := range ecsList {
+		models[inst.ID] = inst.ModelUID
+	}
+	for _, inst := range diskList {
+		models[inst.ID] = inst.ModelUID
+	}
+	pairCache := make(map[string]domain.ModelRelationType, 1)
+	valid := make([]domain.RelationCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		pairErr := s.validateDeriveCandidate(ctx, c, models, pairCache)
+		if pairErr != nil {
+			stats.SkippedInvalid++
+			s.logger.Warn("推导的关系不符合关系类型声明，已跳过",
+				elog.String("relation_type", c.RelationTypeUID),
+				elog.Int64("source", c.SourceInstanceID),
+				elog.Int64("target", c.TargetInstanceID),
+				elog.FieldErr(pairErr))
+			continue
+		}
+		valid = append(valid, c)
+	}
+	candidates = valid
 
 	if dryRun {
 		// 仅统计已存在数量，不写入

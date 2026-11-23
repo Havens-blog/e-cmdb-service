@@ -30,6 +30,8 @@ type DeriveStats struct {
 	SkippedSelf int `json:"skipped_self"`
 	// Unresolved 引用无法对上任何实例（多为同步范围未覆盖的账号/区域）
 	Unresolved int `json:"unresolved"`
+	// SkippedInvalid 两端模型不符合关系类型声明而跳过（关系类型元数据被改/缺失）
+	SkippedInvalid int `json:"skipped_invalid"`
 }
 
 // DeriveResult 推导汇总
