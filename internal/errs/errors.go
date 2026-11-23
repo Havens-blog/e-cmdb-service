@@ -48,6 +48,10 @@ var (
 	// 400011/400012 预留给「关系类型引用的源/目标模型不存在」（在途 PR #77）；
 	// 本错误取 400013，避免三种语义共用一个对外 code。
 	RelationModelMismatch = ErrorCode{Code: 400013, Msg: "relation model mismatch"}
+	// RelationTypeNotFound: 关系类型不存在。原先复用 RelationInvalid（400004），
+	// 但该 sentinel 同时被 DeriveRelations 用来表示「不支持的推导规则」，
+	// 两者语义不同，一旦调用点复用映射就会给推导请求返回「关系类型不存在」的误导文案。
+	RelationTypeNotFound = ErrorCode{Code: 400015, Msg: "relation type not found"}
 )
 
 // 属性相关错误码
@@ -93,6 +97,7 @@ var (
 	ErrRelationExists        = errors.New("relation already exists")
 	ErrInvalidRelation       = errors.New("invalid relation")
 	ErrRelationModelMismatch = errors.New("relation model mismatch")
+	ErrRelationTypeNotFound  = errors.New("relation type not found")
 
 	ErrAttributeNotFound = errors.New("attribute not found")
 	ErrAttributeExists   = errors.New("attribute already exists")

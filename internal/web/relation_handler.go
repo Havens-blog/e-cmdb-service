@@ -307,8 +307,10 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 		// 否则方向与基数语义不成立（实测可用 vpc_subnet 连接两个 host 实例）。
 		return ErrorResultWithMsg(errs.RelationModelMismatch,
 			"所选关系类型要求固定的资产类型组合，当前源资产或目标资产的类型不符合，请重新选择"), true
-	case errors.Is(err, errs.ErrInvalidRelation):
-		return ErrorResultWithMsg(errs.RelationInvalid,
+	case errors.Is(err, errs.ErrRelationTypeNotFound):
+		// 独立 sentinel：ErrInvalidRelation 在 service 层还表示「不支持的推导规则」，
+		// 两者共用会让推导请求被回成「关系类型不存在」。
+		return ErrorResultWithMsg(errs.RelationTypeNotFound,
 			"关系类型不存在或已被删除，请刷新后重新选择"), true
 	}
 	return ginx.Result{}, false

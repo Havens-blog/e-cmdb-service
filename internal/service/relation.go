@@ -84,7 +84,14 @@ func (s *relationService) loadEndpointModels(ctx context.Context, tenantID int64
 // 关系的方向与基数语义因此不成立，拓扑与影响分析会给出错误结论。
 // 实测现存 1304 条实例关系全部符合各自关系类型声明的模型对，说明该校验与既有数据兼容。
 func (s *relationService) validateRelationEndpoints(ctx context.Context, relations []domain.InstanceRelation) error {
-	if s.instanceRepo == nil || len(relations) == 0 {
+	if len(relations) == 0 {
+		return nil
+	}
+	// 模型对校验依赖端点实例的 model_uid，因此 instanceRepo 缺失时两种校验都无从进行，
+	// 统一在这里跳过（原先 modelRelRepo 的 nil 兜底散落在 validateModelPair 里，
+	// 一旦 instanceRepo 为 nil 而 modelRelRepo 非 nil，就会拿空 models 表比对，
+	// 得到 actual=-> 的 mismatch 并拒绝一切写入）。
+	if s.instanceRepo == nil {
 		return nil
 	}
 	idsByTenant := make(map[int64][]int64, 4)
@@ -96,6 +103,10 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 		models, err := s.loadEndpointModels(ctx, tenantID, ids)
 		if err != nil {
 			return err
+		}
+		// modelRelRepo 未注入时只保留端点存在性校验，兼容旧装配与既有单测。
+		if s.modelRelRepo == nil {
+			continue
 		}
 		for _, rel := range relations {
 			if rel.TenantID != tenantID {
@@ -110,16 +121,14 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 }
 
 // validateModelPair 校验单条关系两端的模型与关系类型声明一致。
-// modelRelRepo 未注入时跳过模型校验（仅保留端点存在性校验），便于单测与旧装配路径。
+// 调用方（validateRelationEndpoints）已保证 instanceRepo 与 modelRelRepo 均非 nil，
+// 且 models 覆盖本条关系的两端实例，这里不再做 nil 兜底，避免两处条件漂移。
 func (s *relationService) validateModelPair(
 	ctx context.Context,
 	rel domain.InstanceRelation,
 	models map[int64]string,
 	cache map[string]domain.ModelRelationType,
 ) error {
-	if s.modelRelRepo == nil {
-		return nil
-	}
 	relType, ok := cache[rel.RelationTypeUID]
 	if !ok {
 		loaded, err := s.modelRelRepo.GetByUID(ctx, rel.RelationTypeUID)
@@ -127,7 +136,7 @@ func (s *relationService) validateModelPair(
 			return fmt.Errorf("failed to load relation type %q: %w", rel.RelationTypeUID, err)
 		}
 		if loaded.ID == 0 {
-			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrInvalidRelation, rel.RelationTypeUID)
+			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrRelationTypeNotFound, rel.RelationTypeUID)
 		}
 		relType = loaded
 		cache[rel.RelationTypeUID] = loaded
@@ -137,8 +146,10 @@ func (s *relationService) validateModelPair(
 	if sourceModel == relType.SourceModelUID && targetModel == relType.TargetModelUID {
 		return nil
 	}
-	return fmt.Errorf("%w: relation_type=%s declared=%s->%s actual=%s->%s",
-		errs.ErrRelationModelMismatch, rel.RelationTypeUID, relType.SourceModelUID, relType.TargetModelUID, sourceModel, targetModel)
+	// 批量创建时整体拒绝，必须能定位到具体条目，因此带上两端 instance_id。
+	return fmt.Errorf("%w: relation_type=%s source_instance_id=%d target_instance_id=%d declared=%s->%s actual=%s->%s",
+		errs.ErrRelationModelMismatch, rel.RelationTypeUID, rel.SourceInstanceID, rel.TargetInstanceID,
+		relType.SourceModelUID, relType.TargetModelUID, sourceModel, targetModel)
 }
 
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {

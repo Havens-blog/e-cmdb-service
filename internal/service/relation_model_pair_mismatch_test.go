@@ -92,7 +92,7 @@ func TestRelationCreate_RejectsUnknownRelationType(t *testing.T) {
 
 	if _, err := svc.Create(context.Background(), domain.InstanceRelation{
 		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "zz_no_such_type",
-	}); !errors.Is(err, errs.ErrInvalidRelation) {
+	}); !errors.Is(err, errs.ErrRelationTypeNotFound) {
 		t.Fatalf("未知关系类型应拒绝，err = %v", err)
 	}
 	if len(relRepo.created) != 0 {
@@ -130,5 +130,42 @@ func TestRelationCreate_PairCheckSkippedWithoutModelRepo(t *testing.T) {
 		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "vpc_subnet",
 	}); err != nil {
 		t.Fatalf("未注入 modelRelRepo 时不应因模型对失败，err = %v", err)
+	}
+}
+
+// 批量创建整体拒绝时，错误必须能定位到具体条目：带上两端 instance_id。
+func TestRelationCreateBatch_MismatchErrorCarriesInstanceIDs(t *testing.T) {
+	instRepo, relRepo := newPairFixture("host", "host")
+	svc := NewRelationService(relRepo, instRepo, newFakeModelRelRepo(vpcSubnetRelationType))
+
+	_, err := svc.CreateBatch(context.Background(), []domain.InstanceRelation{
+		{TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "vpc_subnet"},
+	})
+	if err == nil {
+		t.Fatal("模型对不匹配应拒绝批量创建")
+	}
+	if !errors.Is(err, errs.ErrRelationModelMismatch) {
+		t.Fatalf("错误类型不对：%v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"source_instance_id=1", "target_instance_id=2", "declared=vpc->subnet"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("错误信息缺少 %q：%s", want, msg)
+		}
+	}
+}
+
+// instanceRepo 缺失时不能拿空 models 表硬校验模型对（否则一切写入都会被误拒）。
+func TestRelationCreate_PairCheckSkippedWithoutInstanceRepo(t *testing.T) {
+	_, relRepo := newPairFixture("host", "host")
+	svc := NewRelationService(relRepo, nil, newFakeModelRelRepo(vpcSubnetRelationType))
+
+	if _, err := svc.Create(context.Background(), domain.InstanceRelation{
+		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "vpc_subnet",
+	}); err != nil {
+		t.Fatalf("未注入 instanceRepo 时不应拒绝写入，err = %v", err)
+	}
+	if len(relRepo.created) != 1 {
+		t.Fatalf("应写入 1 条关系，实际 %d", len(relRepo.created))
 	}
 }
