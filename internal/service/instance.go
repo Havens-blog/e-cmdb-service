@@ -627,14 +627,7 @@ func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64
 	// 且质量页 dangling_relation_count 由此从 0 变 1。
 	var endpoints []instanceAccountEndpoint
 	if s.relationRepo != nil {
-		if list, err := s.repo.List(ctx, domain.InstanceFilter{AccountID: accountID, Limit: 100000}); err != nil {
-			s.logger.Warn("按账号删除前查询实例列表失败，将跳过关系清理",
-				elog.Int64("account_id", accountID), elog.FieldErr(err))
-		} else {
-			for _, inst := range list {
-				endpoints = append(endpoints, instanceAccountEndpoint{tenantID: inst.TenantID, instanceID: inst.ID})
-			}
-		}
+		endpoints = s.collectAccountEndpoints(ctx, accountID)
 	}
 
 	if err := s.repo.DeleteByAccountID(ctx, accountID); err != nil {
@@ -645,6 +638,50 @@ func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64
 		s.detachRelations(ctx, ep.tenantID, ep.instanceID)
 	}
 	return nil
+}
+
+// accountDetachPageSize 是「按账号删除」收集待解绑实例的分页大小。
+//
+// 不能用一次 `Limit: 100000` 了事：`DeleteByAccountID` 本身按 account_id 无上限删除，
+// 而 List 带 limit 时只返回前 N 条，超出部分被删掉却不会被解绑 —— 又留下一批悬空关系，
+// 且日志里看不出异常（正是本缺陷要消除的那类静默残留）。
+const accountDetachPageSize = 5000
+
+// accountDetachMaxPages 是分页收集的安全上限（1,000 万实例），仅用于防死循环。
+const accountDetachMaxPages = 2000
+
+// collectAccountEndpoints 分页收集某云账号下所有实例的 (tenant_id, instance_id)。
+//
+// 中途查询失败时保留已收集到的端点：这些实例同样会被删除，先把已知关系清掉，
+// 比整批放弃更接近「不留悬空关系」的目标；缺口通过 Warn 暴露。
+func (s *instanceService) collectAccountEndpoints(ctx context.Context, accountID int64) []instanceAccountEndpoint {
+	var endpoints []instanceAccountEndpoint
+	for page := 0; page < accountDetachMaxPages; page++ {
+		offset := int64(page) * accountDetachPageSize
+		list, err := s.repo.List(ctx, domain.InstanceFilter{
+			AccountID: accountID,
+			Offset:    offset,
+			Limit:     accountDetachPageSize,
+		})
+		if err != nil {
+			s.logger.Warn("按账号删除前查询实例列表失败，关系清理将只覆盖已收集到的实例",
+				elog.Int64("account_id", accountID),
+				elog.Int64("collected", int64(len(endpoints))),
+				elog.FieldErr(err))
+			return endpoints
+		}
+		for _, inst := range list {
+			endpoints = append(endpoints, instanceAccountEndpoint{tenantID: inst.TenantID, instanceID: inst.ID})
+		}
+		if len(list) < accountDetachPageSize {
+			return endpoints
+		}
+	}
+	s.logger.Warn("按账号删除前收集实例达到分页上限，可能存在关系清理盲区",
+		elog.Int64("account_id", accountID),
+		elog.Int64("collected", int64(len(endpoints))),
+		elog.Int("max_pages", accountDetachMaxPages))
+	return endpoints
 }
 
 func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) error {

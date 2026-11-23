@@ -27,6 +27,8 @@ type fakeInstanceRepo struct {
 	// listByAccount 可选：按 account_id 返回固定列表（用于「按账号删除」用例）。
 	// 为 nil 时 List 走原逻辑，不影响既有测试。
 	listByAccount map[int64][]domain.Instance
+	// listCalls 记录每次 List 的过滤条件（用于验证分页收集没有只取第一页）。
+	listCalls []domain.InstanceFilter
 	// createBatchErr 可选：让 CreateBatch 返回错误（用于验证写库失败不写审计）。
 	createBatchErr error
 	// createBatchErrCount 与 createBatchErr 搭配：模拟「有序批量插入中途失败」时
@@ -69,11 +71,17 @@ func (f *fakeInstanceRepo) GetByAssetID(ctx context.Context, tenantID int64, mod
 	return domain.Instance{}, nil
 }
 func (f *fakeInstanceRepo) List(ctx context.Context, filter domain.InstanceFilter) ([]domain.Instance, error) {
+	f.listCalls = append(f.listCalls, filter)
 	if f.listByAccount != nil {
-		if v, ok := f.listByAccount[filter.AccountID]; ok {
-			return v, nil
+		v := f.listByAccount[filter.AccountID]
+		if filter.Offset >= int64(len(v)) {
+			return nil, nil
 		}
-		return nil, nil
+		v = v[int(filter.Offset):]
+		if filter.Limit > 0 && int64(len(v)) > filter.Limit {
+			v = v[:filter.Limit]
+		}
+		return v, nil
 	}
 	if f.listByModel != nil {
 		if v, ok := f.listByModel[filter.ModelUID]; ok {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
@@ -86,6 +87,40 @@ func TestInstanceDeleteByAccountID_CascadeRelations(t *testing.T) {
 		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, nil, nil, nil)
 		if err := svc.DeleteByAccountID(context.Background(), 9); err != nil {
 			t.Fatalf("未注入关系仓储时应直接删除，实际: %v", err)
+		}
+	})
+
+	t.Run("实例数超过单页时仍全部解绑（分页收集，不留清理盲区）", func(t *testing.T) {
+		// 评审意见（PR #79 第 1 轮，low）：收集端原先写死 Limit: 100000，
+		// 而 DeleteByAccountID 按 account_id 无上限删除；账号实例数超过上限时
+		// 最老那批实例被删掉却没有解绑，又留下悬空关系，且日志看不出异常。
+		total := accountDetachPageSize + 1
+		instances := make([]domain.Instance, 0, total)
+		for i := 0; i < total; i++ {
+			instances = append(instances, domain.Instance{
+				ID:        int64(1000 + i),
+				TenantID:  3,
+				ModelUID:  "ecs",
+				AssetID:   fmt.Sprintf("i-page-%d", i),
+				AccountID: 9,
+			})
+		}
+		instRepo := newFakeInstanceRepo()
+		instRepo.listByAccount = map[int64][]domain.Instance{9: instances}
+		relRepo := &fakeRelationRepoForCascade{}
+
+		svc := NewInstanceService(instRepo, &fakeModelRepo{}, nil, relRepo, nil, nil)
+		if err := svc.DeleteByAccountID(context.Background(), 9); err != nil {
+			t.Fatalf("按账号删除应成功，实际: %v", err)
+		}
+		if len(relRepo.deletedInstanceIDs) != total {
+			t.Fatalf("应按全部 %d 个实例解绑，实际: %d", total, len(relRepo.deletedInstanceIDs))
+		}
+		if len(instRepo.listCalls) < 2 {
+			t.Fatalf("超过单页时应分页收集（至少 2 次 List），实际: %d", len(instRepo.listCalls))
+		}
+		if instRepo.listCalls[1].Offset != int64(accountDetachPageSize) {
+			t.Fatalf("第二页 offset 应为 %d，实际: %d", accountDetachPageSize, instRepo.listCalls[1].Offset)
 		}
 	})
 }
