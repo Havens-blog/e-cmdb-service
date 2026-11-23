@@ -210,10 +210,13 @@ func (h *ModelGroupHandler) Update(ctx *gin.Context) {
 		return
 	}
 
+	// 文本归一（uid/name/icon/description 的 TrimSpace）统一由
+	// service.normalizeModelGroup 负责，handler 只做「是否传入」的合并。
+	// 两层各裁一半会让「未修改 vs 显式改空」的判定分叉：早前 handler 只裁 Name，
+	// 而 service 裁 Icon/Description，于是 icon="   " 在 handler 看上去是「显式赋值」
+	// 到 service 才被裁成空串，两处对同一输入的理解不一致。
 	if req.Name != nil {
-		// 与 Create 一致：handler 层先裁剪，纯空白裁成空串后由服务层统一拒绝，
-		// 避免「显式传纯空白」在 handler 与 service 之间出现两套规范化路径。
-		existing.Name = strings.TrimSpace(*req.Name)
+		existing.Name = *req.Name
 	}
 	if req.Icon != nil {
 		existing.Icon = *req.Icon

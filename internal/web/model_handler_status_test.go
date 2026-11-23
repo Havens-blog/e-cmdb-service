@@ -247,19 +247,24 @@ func TestUpdateModelGroup_ZeroValuesAreApplied(t *testing.T) {
 	}
 }
 
-// 分组更新：显式传纯空白名称要在 handler 层裁剪后交服务层拒绝。
-func TestUpdateModelGroup_BlankNameIsTrimmedThenRejected(t *testing.T) {
+// 分组更新：显式传纯空白名称要原样交给服务层，由 normalizeModelGroup 裁剪后拒绝。
+// handler 不再二次裁剪 —— 否则 icon/description 只在服务层裁，两层口径会分叉。
+func TestUpdateModelGroup_BlankNameIsRejectedByService(t *testing.T) {
 	svc := &fakeModelGroupSvc{
 		existing:  domain.ModelGroup{ID: 11, UID: "g", Name: "分组"},
 		updateErr: errs.ErrInvalidModelGroupName,
 	}
 	h := NewModelGroupHandler(svc)
-	code, body := doJSON(t, h.Update, http.MethodPut, "/model-groups/:uid", `{"name":"   "}`)
+	code, body := doJSON(t, h.Update, http.MethodPut, "/model-groups/:uid", `{"name":"   ","icon":"   "}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("期望 400，实际 %d，body=%s", code, body)
 	}
-	if svc.updated == nil || svc.updated.Name != "" {
-		t.Fatalf("纯空白应先裁成空串再交校验，实际 %+v", svc.updated)
+	if svc.updated == nil {
+		t.Fatal("未调用 Update")
+	}
+	// handler 只负责「传了就覆盖」，裁剪与判空是 service.normalizeModelGroup 的职责。
+	if svc.updated.Name != "   " || svc.updated.Icon != "   " {
+		t.Fatalf("handler 不应二次裁剪：%+v", *svc.updated)
 	}
 	if !strings.Contains(body, "分组名称不能为空") {
 		t.Fatalf("缺少中文原因：%s", body)
