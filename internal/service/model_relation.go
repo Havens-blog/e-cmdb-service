@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gotomicro/ego/core/elog"
 
@@ -93,7 +94,11 @@ func (s *modelRelationTypeService) ensureSourceModelExists(ctx context.Context, 
 		return fmt.Errorf("failed to load relation source model: %w", err)
 	}
 	if model.ID == 0 {
-		return fmt.Errorf("%w: model_uid=%s", errs.ErrRelationSourceModelNotFound, sourceModelUID)
+		// 只回哨兵：这条最终可能被 handler 兜成 5xx 并把 err.Error() 原样暴露，
+		// 标识信息留给日志，不进响应体。
+		s.logger.Warn("关系类型引用的源模型不存在",
+			elog.String("source_model_uid", sourceModelUID))
+		return errs.ErrRelationSourceModelNotFound
 	}
 	return nil
 }
@@ -187,16 +192,27 @@ func (s *modelRelationTypeService) ensureChangedModelsExist(ctx context.Context,
 	}
 
 	stored, err := s.repo.GetByUID(ctx, rel.UID)
-	if err != nil || stored.ID == 0 {
+	if err != nil {
+		// 读不到库 ≠ 行不存在：把仓储故障当成「两侧都校验」会掩盖真实错误，
+		// 甚至在两侧都合法时把一次读失败变成「更新成功」。原样上抛。
+		return fmt.Errorf("failed to load relation type %q: %w", rel.UID, err)
+	}
+	if stored.ID == 0 {
 		return s.ensureModelsExist(ctx, rel.SourceModelUID, rel.TargetModelUID)
 	}
 
-	if rel.SourceModelUID != stored.SourceModelUID {
+	// 库里的旧值可能带空白（早于 domain.Validate 裁剪就已存在的行）：不先裁剪，
+	// 一条 " ecs " 的行会被判成「本次改动了源模型」，正好让本函数想放行的
+	// 「存量脏数据只改描述」重新被拦。
+	storedSource := strings.TrimSpace(stored.SourceModelUID)
+	storedTarget := strings.TrimSpace(stored.TargetModelUID)
+
+	if rel.SourceModelUID != storedSource {
 		if err := s.ensureSourceModelExists(ctx, rel.SourceModelUID); err != nil {
 			return err
 		}
 	}
-	if rel.TargetModelUID != stored.TargetModelUID {
+	if rel.TargetModelUID != storedTarget {
 		if err := s.ensureTargetModelExists(ctx, rel.TargetModelUID); err != nil {
 			return err
 		}

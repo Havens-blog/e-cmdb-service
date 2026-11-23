@@ -167,8 +167,10 @@ func TestCreateRelationType_RejectsMissingModels(t *testing.T) {
 		if !errors.Is(err, errs.ErrRelationSourceModelNotFound) {
 			t.Fatalf("期望先报源模型，实际 %v", err)
 		}
-		if !strings.Contains(err.Error(), "model_uid=zz_no_src") {
-			t.Fatalf("错误信息应带上具体 uid，实际 %v", err)
+		// 契约：错误只带裸哨兵，标识只进日志 —— 这条错误可能被 handler 兜成 5xx
+		// 并把 err.Error() 原样暴露给调用方，不能把内部标识泄漏进响应体。
+		if strings.Contains(err.Error(), "zz_no_src") {
+			t.Fatalf("错误信息不应带 uid，实际 %v", err)
 		}
 	})
 }
