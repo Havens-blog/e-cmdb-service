@@ -603,20 +603,36 @@ func (s *instanceService) detachRelations(ctx context.Context, tenantID int64, i
 		elog.Int64("tenant_id", tenantID), elog.Int64("instance_id", instanceID))
 }
 
+// instanceAccountEndpoint 是「按账号删除」时待清理关系的实例端点。
+//
+// 关系仓储的 DeleteByInstanceID 按 `tenant_id` 精确匹配，
+// 所以解绑必须带上实例自身的租户；只带实例 ID 会退化成 tenant 0 而删不掉任何关系。
+type instanceAccountEndpoint struct {
+	tenantID   int64
+	instanceID int64
+}
+
 // DeleteByAccountID 按云账号批量删除实例。
 //
 // 该路径删除的是**一批**实例，若不清理关系会一次性产生大量悬空关系，
 // 危害比单条删除更大。因此先取出待删实例 ID，删除后再逐个解除关系。
 func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64) error {
-	// 先收集受影响实例（用于清理关系）；取不到不影响删除本身
-	var ids []int64
+	// 先收集受影响实例（用于清理关系）；取不到不影响删除本身。
+	//
+	// 必须连同实例自身的 tenant_id 一起收集：关系仓储按 `tenant_id + 实例 ID`
+	// 精确匹配删除（见 dao.DeleteByInstanceID），传 0 会一条都删不掉。
+	// 背景（实测 2026-11-24）：此前这里硬编码 detachRelations(ctx, 0, id)，
+	// 于是「按账号删除实例」永远不会清理关系 —— 生产上已观察到悬空关系
+	// relation_id=400（source=1965 存在、target=385609 已不存在），
+	// 且质量页 dangling_relation_count 由此从 0 变 1。
+	var endpoints []instanceAccountEndpoint
 	if s.relationRepo != nil {
 		if list, err := s.repo.List(ctx, domain.InstanceFilter{AccountID: accountID, Limit: 100000}); err != nil {
 			s.logger.Warn("按账号删除前查询实例列表失败，将跳过关系清理",
 				elog.Int64("account_id", accountID), elog.FieldErr(err))
 		} else {
 			for _, inst := range list {
-				ids = append(ids, inst.ID)
+				endpoints = append(endpoints, instanceAccountEndpoint{tenantID: inst.TenantID, instanceID: inst.ID})
 			}
 		}
 	}
@@ -625,8 +641,8 @@ func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64
 		return err
 	}
 
-	for _, id := range ids {
-		s.detachRelations(ctx, 0, id)
+	for _, ep := range endpoints {
+		s.detachRelations(ctx, ep.tenantID, ep.instanceID)
 	}
 	return nil
 }
