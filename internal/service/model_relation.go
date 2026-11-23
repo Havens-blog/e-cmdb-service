@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
@@ -49,12 +47,8 @@ func NewModelRelationTypeService(repo repository.ModelRelationTypeRepository, in
 }
 
 func (s *modelRelationTypeService) Create(ctx context.Context, rel domain.ModelRelationType) (int64, error) {
-	// 先裁剪再校验：`binding:"required"` 只拒空串，单个空格能进到这里，
-	// 存成 " " 的 uid 会让关系类型在列表里「看得见、选不着」。
-	rel.UID = strings.TrimSpace(rel.UID)
-	rel.Name = strings.TrimSpace(rel.Name)
-	rel.SourceModelUID = strings.TrimSpace(rel.SourceModelUID)
-	rel.TargetModelUID = strings.TrimSpace(rel.TargetModelUID)
+	// 裁剪与判空都在 domain.Validate 内完成（Validate 先 Normalize）：binding:"required" 只拒空串，
+	// 单个空格能进到这里，存成 " " 的 uid 会让关系类型在列表里「看得见、选不着」。
 
 	if err := rel.Validate(); err != nil {
 		return 0, err
@@ -128,13 +122,20 @@ func (s *modelRelationTypeService) List(ctx context.Context, filter domain.Model
 	return rels, total, nil
 }
 
+// Update 更新模型关系类型。
+//
+// 契约：入参是「合并后的完整对象」，不是补丁。
+// HTTP 层（UpdateModelRelation）会先 GetByUID 取旧值，只把用户显式提供的字段覆盖上去，
+// 所以 Name 为空只可能来自两类历史数据或程序化调用：
+//   - 早先落库的空白名称记录（本 PR 修复前 Create 不裁剪，存过 " "）；
+//   - 直接调用 service 的代码。
+//
+// 这类记录要改名必须在该次 PUT 里带上 Name —— 只改 description 会被 Validate 拒绝并返回
+// 「关系类型名称不能为空」，这是刻意选择：静默保留空白名称会让问题数据永远无法被发现。
+//
+// 裁剪与校验都在 domain.Validate 内完成（Validate 先 Normalize），
+// 这里不再重复 TrimSpace，避免两层各写一份日后漂移。
 func (s *modelRelationTypeService) Update(ctx context.Context, rel domain.ModelRelationType) error {
-	// 与 Create 保持同一套裁剪 + 校验：HTTP 层 binding:"required" 放行 " "，
-	// 若这里不裁剪不判空，PUT 就能把关系类型改成空白名称（列表与拓扑边标签都为空白）。
-	rel.UID = strings.TrimSpace(rel.UID)
-	rel.Name = strings.TrimSpace(rel.Name)
-	rel.SourceModelUID = strings.TrimSpace(rel.SourceModelUID)
-	rel.TargetModelUID = strings.TrimSpace(rel.TargetModelUID)
 	if err := rel.Validate(); err != nil {
 		return err
 	}

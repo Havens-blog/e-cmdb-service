@@ -186,6 +186,12 @@ func (h *RelationHandler) CreateModelRelation(ctx *gin.Context, req CreateModelR
 // 要么把「引用了已删除的模型」这类明确原因折成 500 system error，
 // 前端只能弹「操作失败」，用户无法判断该改哪个模型或换哪个类型。
 // 未知错误返回 ok=false，交给上层回落，避免吞掉真正的系统错误。
+//
+// 分支可达性（Create / Update 共用本函数，避免维护者误判某条规则已在两条路径生效）：
+//   - ErrRelationExists：仅 Create 可达（uid 查重）。Update 目前不做 (源,目标,类型) 三元组查重，
+//     所以编辑时把一条类型改成与另一条同名同向的定义不会被拦；这里保留分支，
+//     待 Update 增加三元组查重后自动生效。
+//   - 源/目标模型不存在、UID/名称/模型为空、ErrRelationNotFound：Create 与 Update 均可达。
 func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
 	switch {
 	case errors.Is(err, errs.ErrRelationExists):
@@ -268,27 +274,34 @@ func (h *RelationHandler) UpdateModelRelation(ctx *gin.Context, req UpdateModelR
 
 	existing, err := h.modelRelSvc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		// 服务层会用 %w 包装哨兵错误，必须 errors.Is 才能命中，否则包装后回落 500。
+		// 这里用 errors.Is 而非 == 是前瞻性防御：当前 GetByUID 在 rel.ID == 0 时返回的是
+		// 裸哨兵，== 也能命中；但服务层其它查询路径已经用 %w 包装过哨兵，
+		// 一旦这层也改成包装，== 会静默失配并回落 500，届时只能靠重现才发现。
 		if errors.Is(err, errs.ErrRelationNotFound) {
 			return ErrorResult(errs.RelationNotFound), nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
-	// 部分更新语义：只有显式带上非空值才覆盖，缺失字段保留旧值。
-	// 先裁剪再判空，避免 "   " 被当成「用户想清空名称」——它裁剪后是空串，
-	// 若直接覆盖会由服务层 Validate 拒绝并返回 400，语义上是误伤。
+	// 部分更新语义：只有显式带上「裁剪后非空」的值才覆盖，缺失字段保留旧值。
+	//
+	// 四个字段用同一套规则（裁剪 → 判空 → 覆盖），原因分别是：
+	// - Name 裁后为空：用户其实想清空名称，但名称是必填项，覆盖后会由 Validate 拒绝；
+	//   忽略它、保留旧名才是「部分更新」的正确语义，不误伤只想改描述的调用。
+	// - SourceToTarget / TargetToSource 会作为拓扑边的双向标签展示，
+	//   Description 会在详情里展示；若按「非空即写入原始串」处理，
+	//   用户传 "   " 就会把标签改成一片空白，与 Name 的处理口径也不一致。
 	if name := strings.TrimSpace(req.Name); name != "" {
 		existing.Name = name
 	}
-	if req.SourceToTarget != "" {
-		existing.SourceToTarget = req.SourceToTarget
+	if v := strings.TrimSpace(req.SourceToTarget); v != "" {
+		existing.SourceToTarget = v
 	}
-	if req.TargetToSource != "" {
-		existing.TargetToSource = req.TargetToSource
+	if v := strings.TrimSpace(req.TargetToSource); v != "" {
+		existing.TargetToSource = v
 	}
-	if req.Description != "" {
-		existing.Description = req.Description
+	if v := strings.TrimSpace(req.Description); v != "" {
+		existing.Description = v
 	}
 
 	err = h.modelRelSvc.Update(ctx.Request.Context(), existing)
@@ -337,7 +350,10 @@ func (h *RelationHandler) DeleteModelRelation(ctx *gin.Context) {
 func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 	switch {
 	case errors.Is(err, errs.ErrRelationExists):
-		return ErrorResultWithMsg(errs.ParamsError,
+		// 与 modelRelationTypeErrorResult 的「已存在」用同一个语义码（409 冲突）。
+		// 两个 helper 曾分别给 400001 与 409003：同一种「已存在」在不同入口返回不同 code，
+		// 前端按 code 做「刷新列表 / 提示已存在」判定时会分叉，只能靠文案匹配，容易漏。
+		return ErrorResultWithMsg(errs.RelationExists,
 			"该关联关系已存在：源资产与目标资产之间不能重复创建同一关系"), true
 	case errors.Is(err, errs.ErrInstanceNotFound):
 		return ErrorResultWithMsg(errs.ParamsError,

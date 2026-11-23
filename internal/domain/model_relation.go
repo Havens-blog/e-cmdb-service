@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -47,12 +48,33 @@ type ModelRelationTypeFilter struct {
 	Limit          int
 }
 
-// Validate 验证模型关系类型
+// Normalize 统一裁剪模型关系类型的文本字段。
 //
-// Name 也要判：HTTP 层的 binding:"required" 只拒空串，" " 能通过，
-// 而调用方（service.Create/Update）会先 TrimSpace —— 裁剪后变成 "" 若不再
-// 校验就会落库成无名关系类型，列表和拓扑边标签都会显示空白。
+// 为什么不放在 service：Validate 是导出的领域校验，任何调用方（含将来的批处理、
+// 迁移脚本）都可能直接调用它；若裁剪只写在 service.Create/Update 里，
+// 直接调 Validate 的路径就会把 " " 当成合法名称落库。与 Instance.Normalize
+// 一样把「文本字段如何取值」的规则收在领域层，调用方无需各自记得先裁剪。
+//
+// SourceToTarget / TargetToSource 会作为拓扑边的双向标签展示，
+// Description 会在详情里展示，三者与 Name 同属可选描述性文本，
+// 因此用同一套规则（首尾空白裁掉），避免出现"看得见但全是空格"的标签。
+func (m *ModelRelationType) Normalize() {
+	m.UID = strings.TrimSpace(m.UID)
+	m.Name = strings.TrimSpace(m.Name)
+	m.SourceModelUID = strings.TrimSpace(m.SourceModelUID)
+	m.TargetModelUID = strings.TrimSpace(m.TargetModelUID)
+	m.SourceToTarget = strings.TrimSpace(m.SourceToTarget)
+	m.TargetToSource = strings.TrimSpace(m.TargetToSource)
+	m.Description = strings.TrimSpace(m.Description)
+}
+
+// Validate 验证模型关系类型。
+//
+// 先 Normalize 再判空：HTTP 层的 binding:"required" 只拒空串，" " 能通过；
+// 若不在校验前裁剪，空白名称会被判为合法并落库，列表与拓扑边标签全部空白。
+// 裁剪放在这里（而非仅调用方），保证直接调用 Validate 的路径也不会漏。
 func (m *ModelRelationType) Validate() error {
+	m.Normalize()
 	if m.UID == "" {
 		return ErrInvalidRelationTypeUID
 	}
