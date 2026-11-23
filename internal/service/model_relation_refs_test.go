@@ -40,6 +40,16 @@ func (f *refModelRepo) Update(context.Context, domain.Model) error { return nil 
 
 func (f *refModelRepo) Delete(context.Context, string) error { return nil }
 
+// modelsWith 构造一个只含指定 uid 的模型仓储，供引用校验用例使用。
+// 未列出的 uid 查不到（ID==0），等价于「该模型已被删除」。
+func modelsWith(uids ...string) *refModelRepo {
+	byUID := make(map[string]domain.Model, len(uids))
+	for i, uid := range uids {
+		byUID[uid] = domain.Model{ID: int64(i + 1), UID: uid, Name: uid}
+	}
+	return &refModelRepo{byUID: byUID}
+}
+
 // refRelationRepo 记录 Create 是否被调用，用来证明「校验失败时不落库」。
 type refRelationRepo struct {
 	existing  map[string]bool
@@ -304,7 +314,7 @@ func TestUpdateRelationType_RejectsBlankName(t *testing.T) {
 
 func TestUpdateRelationType_TrimsBeforeWrite(t *testing.T) {
 	rels := &refRelationRepo{existing: map[string]bool{"zz_rel_trim": true}}
-	svc := newRefService(&refModelRepo{}, rels)
+	svc := newRefService(modelsWith("ecs", "disk"), rels)
 
 	rel := validRelation()
 	rel.UID = "  zz_rel_trim  "
@@ -320,6 +330,22 @@ func TestUpdateRelationType_TrimsBeforeWrite(t *testing.T) {
 	got := rels.updated[0]
 	if got.UID != "zz_rel_trim" || got.Name != "裁剪后的名称" || got.SourceModelUID != "ecs" || got.TargetModelUID != "disk" {
 		t.Fatalf("落库值未裁剪：%+v", got)
+	}
+}
+
+// Update 必须与 Create 同一套引用校验，否则 PUT 能把合法类型改成指向已删除的模型。
+func TestUpdateRelationType_RejectsMissingModels(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{"ecs_disk": true}}
+	// 只存在 ecs，目标模型 disk 已删除
+	svc := newRefService(modelsWith("ecs"), rels)
+
+	rel := validRelation()
+	rel.UID = "ecs_disk"
+	if err := svc.Update(context.Background(), rel); !errors.Is(err, errs.ErrRelationTargetModelNotFound) {
+		t.Fatalf("期望 ErrRelationTargetModelNotFound，实际 %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("引用校验失败不应落库，实际写入 %+v", rels.updated)
 	}
 }
 

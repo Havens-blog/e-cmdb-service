@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
@@ -267,14 +268,18 @@ func (h *RelationHandler) UpdateModelRelation(ctx *gin.Context, req UpdateModelR
 
 	existing, err := h.modelRelSvc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrRelationNotFound {
+		// 服务层会用 %w 包装哨兵错误，必须 errors.Is 才能命中，否则包装后回落 500。
+		if errors.Is(err, errs.ErrRelationNotFound) {
 			return ErrorResult(errs.RelationNotFound), nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
-	if req.Name != "" {
-		existing.Name = req.Name
+	// 部分更新语义：只有显式带上非空值才覆盖，缺失字段保留旧值。
+	// 先裁剪再判空，避免 "   " 被当成「用户想清空名称」——它裁剪后是空串，
+	// 若直接覆盖会由服务层 Validate 拒绝并返回 400，语义上是误伤。
+	if name := strings.TrimSpace(req.Name); name != "" {
+		existing.Name = name
 	}
 	if req.SourceToTarget != "" {
 		existing.SourceToTarget = req.SourceToTarget
@@ -288,7 +293,7 @@ func (h *RelationHandler) UpdateModelRelation(ctx *gin.Context, req UpdateModelR
 
 	err = h.modelRelSvc.Update(ctx.Request.Context(), existing)
 	if err != nil {
-		// 空白名称/模型缺失这类规则错误要给 400 + 中文原因，不能被兜底成 500
+		// 名称空白、引用模型不存在这类规则错误要给 400 + 中文原因，不能被兜底成 500
 		if result, ok := modelRelationTypeErrorResult(err); ok {
 			return result, nil
 		}

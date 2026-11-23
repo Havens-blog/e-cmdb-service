@@ -147,6 +147,12 @@ func (s *modelRelationTypeService) Update(ctx context.Context, rel domain.ModelR
 		return errs.ErrRelationNotFound
 	}
 
+	// 与 Create 同一套引用校验：否则 PUT 仍能把一条合法类型改成指向已删除的模型，
+	// 结果与新增时拦截、编辑时放行的口径不一致（存量 ecs_belong_to_vpc→cloud_ecs 即此形态）。
+	if err := s.ensureModelsExist(ctx, rel.SourceModelUID, rel.TargetModelUID); err != nil {
+		return err
+	}
+
 	return s.repo.Update(ctx, rel)
 }
 
