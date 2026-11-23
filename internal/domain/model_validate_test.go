@@ -59,3 +59,40 @@ func TestModelValidate_KeepsInnerSpaces(t *testing.T) {
 		t.Fatalf("Name = %q, want %q", m.Name, "云 主机")
 	}
 }
+
+// TestModelNormalize_TrimsParentAndProvider 回归：ParentUID/Provider 此前不在裁剪清单里。
+//
+// parent_uid=" " 落库后 IsTopLevel()（ParentUID == ""）与 IsSubModel()（ParentUID != ""）
+// 双双为 false，模型层级自相矛盾——正是「归一清单两处各写一份」造成的漏网字段。
+func TestModelNormalize_TrimsParentAndProvider(t *testing.T) {
+	m := Model{UID: " host ", Name: " 主机 ", Category: " 计算 ", Level: 1, ParentUID: "   ", Provider: " all "}
+
+	m.Normalize()
+
+	if m.ParentUID != "" {
+		t.Fatalf("ParentUID = %q, want 空串", m.ParentUID)
+	}
+	if !m.IsTopLevel() {
+		t.Fatal("裁剪后 parent_uid 为空，应判定为顶层模型")
+	}
+	if m.IsSubModel() {
+		t.Fatal("裁剪后 parent_uid 为空，不应判定为子模型")
+	}
+	if m.Provider != "all" {
+		t.Fatalf("Provider = %q, want all", m.Provider)
+	}
+	if m.UID != "host" || m.Name != "主机" || m.Category != "计算" {
+		t.Fatalf("其余字段未按预期裁剪: %+v", m)
+	}
+}
+
+// TestModelNormalize_KeepsSubModel 归一不得把真实子模型的父级清空。
+func TestModelNormalize_KeepsSubModel(t *testing.T) {
+	m := Model{UID: "ecs", Name: "云服务器", Category: "计算", Level: 2, ParentUID: " compute "}
+
+	m.Normalize()
+
+	if m.ParentUID != "compute" || !m.IsSubModel() {
+		t.Fatalf("ParentUID = %q, IsSubModel = %v, want compute/true", m.ParentUID, m.IsSubModel())
+	}
+}

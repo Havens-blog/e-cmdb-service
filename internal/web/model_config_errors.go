@@ -31,6 +31,10 @@ func modelConfigErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, errs.ErrModelHasInstances):
 		return ErrorResultWithMsg(errs.ModelHasInstances,
 			"该模型下仍有资产实例，无法删除：请先删除或迁移这些实例后再试"), true
+	// 空值类拒绝用资源专属码（ModelInvalid 400002 / ModelGroupInvalid 400006），
+	// 与同批改的字段侧（attribute_handler.go 的 AttributeInvalid）保持同构：
+	// 同一个包里的「参数解析失败」用 ParamsError，而「业务字段为空」各自有码，
+	// 前端可据 code 定位到具体资源，msg 由这里给出中文。
 	case errors.Is(err, errs.ErrInvalidModelUID):
 		return ErrorResultWithMsg(errs.ModelInvalid, "模型标识（UID）不能为空"), true
 	case errors.Is(err, errs.ErrInvalidModelName):

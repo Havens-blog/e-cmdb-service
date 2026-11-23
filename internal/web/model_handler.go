@@ -124,13 +124,13 @@ func (h *ModelHandler) GetByUID(ctx *gin.Context) {
 
 	model, err := h.svc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if result, ok := modelConfigErrorResult(err); ok {
-			// GetByUID 不带 body，非 404 的已知拒绝（当前只有未找到）同样用 404，
-			// 与 DELETE /models/:uid 的口径保持一致。
-			ctx.JSON(404, result)
+		// 统一走 writeModelConfigError：状态码选择只在这里一处（见 model_config_errors.go）。
+		// GetByUID 当前只会返回「未找到」（映射为 404），但若将来新增校验类哨兵，
+		// 就地写死 404 会把 400 级拒绝报成「不存在」，正是这个 helper 要避免的分叉。
+		if writeModelConfigError(ctx, err) {
 			return
 		}
-		ctx.JSON(500, ErrorResultWithMsg(errs.SystemError, err.Error()))
+		ctx.JSON(http.StatusInternalServerError, ErrorResultWithMsg(errs.SystemError, err.Error()))
 		return
 	}
 
@@ -231,8 +231,10 @@ func (h *ModelHandler) Update(ctx *gin.Context) {
 
 	// 指针字段：nil 表示「本次不改」，非 nil 表示「按传入值覆盖」，
 	// 因此显式传空串/0 会被真正写回（配合服务层校验给出中文拒绝）。
+	// 文本归一统一由 service（Model.Normalize）负责，这里不再就地 TrimSpace：
+	// 与 model_group_handler 保持同一套「handler 只合并、service 归一」的约定。
 	if req.Name != nil {
-		existing.Name = strings.TrimSpace(*req.Name)
+		existing.Name = *req.Name
 	}
 	if req.ModelGroupID != nil {
 		existing.ModelGroupID = *req.ModelGroupID

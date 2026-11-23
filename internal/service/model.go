@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -94,11 +93,10 @@ func (s *modelService) Update(ctx context.Context, model domain.Model) error {
 	// 历史行可能存在空 category；若这里沿用 Model.Validate（要求 Category 非空），
 	// 这些模型会再也改不了任何字段，而接口又没有补写 category 的手段。
 	// 名称仍必须非空，否则 PUT 可以用单个空格把名称改成「空」。
-	model.UID = strings.TrimSpace(model.UID)
-	model.Name = strings.TrimSpace(model.Name)
-	model.Icon = strings.TrimSpace(model.Icon)
-	model.Description = strings.TrimSpace(model.Description)
-	model.Category = strings.TrimSpace(model.Category)
+	//
+	// 裁剪走 Model.Normalize 而不是各自写一份：UID/Category 在这里**只裁剪不校验**
+	// （与 Validate 的区别仅此一处），字段清单由 Normalize 独占，新增字段不会漏裁。
+	model.Normalize()
 	if model.Name == "" {
 		return errs.ErrInvalidModelName
 	}
