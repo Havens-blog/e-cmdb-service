@@ -12,8 +12,7 @@ import (
 // TestInstanceDeleteByAccountID_CascadeRelations 锁定「按云账号删除实例时，按实例自身租户解除关系」。
 //
 // 背景（实测 2026-11-24，生产库）：质量页 dangling_relation_count 从 0 变 1，
-// 具体是 relation_id=400 指向的 target 实例 385609 已被删除（GET 404），
-// 而 source 实例 1965 仍存在 —— 删除实例的路径没有清掉这条关系。
+// 具体表现为「关系的一端实例仍存在、另一端已被删除」，删除实例的路径没有清掉这条关系。
 //
 // 代码根因：DeleteByAccountID 收集完实例后调用 detachRelations(ctx, 0, id)，
 // 租户被硬编码成 0；而 dao.DeleteByInstanceID 的过滤条件是 `tenant_id: tenantID`
@@ -121,6 +120,17 @@ func TestInstanceDeleteByAccountID_CascadeRelations(t *testing.T) {
 		}
 		if instRepo.listCalls[1].Offset != int64(accountDetachPageSize) {
 			t.Fatalf("第二页 offset 应为 %d，实际: %d", accountDetachPageSize, instRepo.listCalls[1].Offset)
+		}
+		// offset 分页只有在排序键唯一时才稳定：DAO 默认按 ctime 倒序，而 ctime
+		// 在批量同步/导入下大量并列，页边界漂移会让实例被删掉却不解绑关系。
+		// 因此每一页都必须显式按唯一键 id 升序。
+		for i, call := range instRepo.listCalls {
+			if call.SortBy != "id" {
+				t.Fatalf("第 %d 次 List 必须按 id 排序（唯一键）以免页边界漂移，实际: %q", i+1, call.SortBy)
+			}
+			if call.SortDesc {
+				t.Fatalf("第 %d 次 List 不应降序，实际 SortDesc=true", i+1)
+			}
 		}
 	})
 }

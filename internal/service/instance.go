@@ -621,10 +621,9 @@ func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64
 	//
 	// 必须连同实例自身的 tenant_id 一起收集：关系仓储按 `tenant_id + 实例 ID`
 	// 精确匹配删除（见 dao.DeleteByInstanceID），传 0 会一条都删不掉。
-	// 背景（实测 2026-11-24）：此前这里硬编码 detachRelations(ctx, 0, id)，
-	// 于是「按账号删除实例」永远不会清理关系 —— 生产上已观察到悬空关系
-	// relation_id=400（source=1965 存在、target=385609 已不存在），
-	// 且质量页 dangling_relation_count 由此从 0 变 1。
+	// 背景：此前这里硬编码 detachRelations(ctx, 0, id)，于是「按账号删除实例」
+	// 永远不会清理关系 —— 线上可观察到「关系的一端存活、另一端已被删除」的悬空关系，
+	// 且质量页的 dangling_relation_count 由此从 0 变 1。具体实例 ID 不入库内注释。
 	var endpoints []instanceAccountEndpoint
 	if s.relationRepo != nil {
 		endpoints = s.collectAccountEndpoints(ctx, accountID)
@@ -658,10 +657,16 @@ func (s *instanceService) collectAccountEndpoints(ctx context.Context, accountID
 	var endpoints []instanceAccountEndpoint
 	for page := 0; page < accountDetachMaxPages; page++ {
 		offset := int64(page) * accountDetachPageSize
+		// 排序字段必须显式指定为唯一键 id：DAO 的默认排序是 ctime 倒序，而
+		// ctime 在批量同步/导入下大量并列，MongoDB 对并列键不保证跨查询顺序稳定，
+		// offset 分页的页边界会漂移 —— 被跳过的实例照样被删掉却不会解绑关系，
+		// 正好复现本函数要消除的那类静默悬空关系。
 		list, err := s.repo.List(ctx, domain.InstanceFilter{
 			AccountID: accountID,
 			Offset:    offset,
 			Limit:     accountDetachPageSize,
+			SortBy:    "id",
+			SortDesc:  false,
 		})
 		if err != nil {
 			s.logger.Warn("按账号删除前查询实例列表失败，关系清理将只覆盖已收集到的实例",
