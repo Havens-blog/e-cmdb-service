@@ -147,6 +147,16 @@ func TestListParamSetsMatchHandlerReads(t *testing.T) {
 			mustHas: []string{"offset", "limit", "source_instance_id", "target_instance_id", "relation_type_uid"},
 		},
 		{
+			name:    "quality-overview",
+			set:     qualityOverviewParamSet,
+			mustHas: []string{},
+		},
+		{
+			name:    "quality-orphan-sources",
+			set:     qualityOrphanSourcesParamSet,
+			mustHas: []string{},
+		},
+		{
 			name:    "quality-issues",
 			set:     qualityIssuesParamSet,
 			mustHas: []string{"offset", "limit", "type"},
@@ -239,6 +249,8 @@ func TestListEndpointsRejectUnknownParamEndToEnd(t *testing.T) {
 	r.GET("/quality/issues", ginx.Wrap(qh.Issues))
 	r.GET("/quality/field-issues", ginx.Wrap(qh.FieldIssues))
 	r.GET("/quality/sync-issues", ginx.Wrap(qh.SyncIssues))
+	r.GET("/quality/overview", ginx.Wrap(qh.Overview))
+	r.GET("/quality/orphan-sources", ginx.Wrap(qh.OrphanSources))
 	r.GET("/impact", ginx.Wrap(ih.GetImpact))
 
 	http400 := []string{
@@ -246,7 +258,8 @@ func TestListEndpointsRejectUnknownParamEndToEnd(t *testing.T) {
 		"/model-relations", "/instance-relations",
 	}
 	envelope := []string{
-		"/quality/issues", "/quality/field-issues", "/quality/sync-issues", "/impact",
+		"/quality/issues", "/quality/field-issues", "/quality/sync-issues",
+		"/quality/overview", "/quality/orphan-sources", "/impact",
 	}
 
 	for _, p := range http400 {
