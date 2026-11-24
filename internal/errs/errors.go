@@ -26,7 +26,8 @@ var (
 	RelationTypeInUse = ErrorCode{Code: 400010, Msg: "relation type is in use by instance relations, cannot delete"}
 	// AttributeInUse：字段仍被实例数据使用，不能删除。
 	// 与 ModelHasInstances / RelationTypeInUse 同族（「被引用不可删」语义）。
-	// 注：400011–400013 已被在途分支预留（关系类型引用的源/目标模型不存在、实例关系模型对不匹配）。
+	// 注：400011–400012 由 #77（关系类型引用的源/目标模型不存在）占用；400013 由本文件的
+	// RelationModelMismatch 占用；400014 即本错误。
 	AttributeInUse = ErrorCode{Code: 400014, Msg: "attribute in use by instances, cannot delete"}
 )
 
@@ -42,6 +43,15 @@ var (
 	RelationNotFound = ErrorCode{Code: 404003, Msg: "relation not found"}
 	RelationExists   = ErrorCode{Code: 409003, Msg: "relation already exists"}
 	RelationInvalid  = ErrorCode{Code: 400004, Msg: "relation invalid"}
+	// RelationModelMismatch: 关系类型声明了固定的「源模型 → 目标模型」，
+	// 两端实例的模型必须与之匹配，否则关系语义（方向/基数）无法成立。
+	// 编号说明（400xxx 关系/属性域）：
+	//   400010 RelationTypeInUse         删除在用模型关系类型被拒（#70）
+	//   400011/400012                    「关系类型引用的源/目标模型不存在」（#77）
+	//   400013 RelationModelMismatch     本错误
+	//   400014 AttributeInUse            删除在用字段被拒（#78）
+	// 编号刻意不连续：每个语义独占一个对外 code，避免前端按 code 分支时撞号。
+	RelationModelMismatch = ErrorCode{Code: 400013, Msg: "relation model mismatch"}
 )
 
 // 属性相关错误码
@@ -83,9 +93,10 @@ var (
 	ErrInstanceExists    = errors.New("instance already exists")
 	ErrInvalidAttributes = errors.New("invalid attributes")
 
-	ErrRelationNotFound = errors.New("relation not found")
-	ErrRelationExists   = errors.New("relation already exists")
-	ErrInvalidRelation  = errors.New("invalid relation")
+	ErrRelationNotFound      = errors.New("relation not found")
+	ErrRelationExists        = errors.New("relation already exists")
+	ErrInvalidRelation       = errors.New("invalid relation")
+	ErrRelationModelMismatch = errors.New("relation model mismatch")
 
 	ErrAttributeNotFound = errors.New("attribute not found")
 	ErrAttributeExists   = errors.New("attribute already exists")

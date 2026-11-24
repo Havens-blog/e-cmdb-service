@@ -53,7 +53,7 @@ func TestDeriveRelationsService(t *testing.T) {
 
 	t.Run("dry-run 不写入", func(t *testing.T) {
 		relRepo := &fakeRelationRepoForDerive{}
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 
 		res, err := svc.DeriveRelations(context.Background(), 3, "ecs_disk", true)
 		if err != nil {
@@ -69,7 +69,7 @@ func TestDeriveRelationsService(t *testing.T) {
 
 	t.Run("write 实际写入", func(t *testing.T) {
 		relRepo := &fakeRelationRepoForDerive{}
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 
 		res, err := svc.DeriveRelations(context.Background(), 3, "ecs_disk", false)
 		if err != nil {
@@ -88,7 +88,7 @@ func TestDeriveRelationsService(t *testing.T) {
 
 	t.Run("已存在则幂等跳过", func(t *testing.T) {
 		relRepo := &fakeRelationRepoForDerive{existsValue: true}
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 
 		res, err := svc.DeriveRelations(context.Background(), 3, "ecs_disk", false)
 		if err != nil {
@@ -104,7 +104,7 @@ func TestDeriveRelationsService(t *testing.T) {
 
 	t.Run("不支持的规则返回错误", func(t *testing.T) {
 		relRepo := &fakeRelationRepoForDerive{}
-		svc := NewRelationService(relRepo, instRepo)
+		svc := NewRelationService(relRepo, instRepo, nil)
 
 		_, err := svc.DeriveRelations(context.Background(), 3, "vpc_subnet", false)
 		if err == nil {

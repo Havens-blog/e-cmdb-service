@@ -16,9 +16,9 @@ import (
 
 func TestRelationCreate_RejectsMissingEndpoint(t *testing.T) {
 	instRepo := newFakeInstanceRepo()
-	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3}
+	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3, ModelUID: "ecs"}
 	relRepo := &fakeRelationRepoForDerive{}
-	svc := NewRelationService(relRepo, instRepo)
+	svc := NewRelationService(relRepo, instRepo, newFakeModelRelRepo(ecsDiskRelationType))
 
 	_, err := svc.Create(context.Background(), domain.InstanceRelation{
 		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "ecs_disk",
@@ -37,10 +37,10 @@ func TestRelationCreate_RejectsMissingEndpoint(t *testing.T) {
 
 func TestRelationCreate_AllowsExistingEndpoints(t *testing.T) {
 	instRepo := newFakeInstanceRepo()
-	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3}
-	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 3}
+	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3, ModelUID: "ecs"}
+	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 3, ModelUID: "disk"}
 	relRepo := &fakeRelationRepoForDerive{}
-	svc := NewRelationService(relRepo, instRepo)
+	svc := NewRelationService(relRepo, instRepo, newFakeModelRelRepo(ecsDiskRelationType))
 
 	if _, err := svc.Create(context.Background(), domain.InstanceRelation{
 		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "ecs_disk",
@@ -54,10 +54,10 @@ func TestRelationCreate_AllowsExistingEndpoints(t *testing.T) {
 
 func TestRelationCreate_RejectsCrossTenantEndpoint(t *testing.T) {
 	instRepo := newFakeInstanceRepo()
-	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3}
-	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 99} // 另一租户
+	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3, ModelUID: "ecs"}
+	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 99, ModelUID: "disk"} // 另一租户
 	relRepo := &fakeRelationRepoForDerive{}
-	svc := NewRelationService(relRepo, instRepo)
+	svc := NewRelationService(relRepo, instRepo, newFakeModelRelRepo(ecsDiskRelationType))
 
 	_, err := svc.Create(context.Background(), domain.InstanceRelation{
 		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "ecs_disk",
@@ -72,10 +72,10 @@ func TestRelationCreate_RejectsCrossTenantEndpoint(t *testing.T) {
 
 func TestRelationCreateBatch_RejectsWhenAnyMissing(t *testing.T) {
 	instRepo := newFakeInstanceRepo()
-	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3}
-	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 3}
+	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3, ModelUID: "ecs"}
+	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 3, ModelUID: "disk"}
 	relRepo := &fakeRelationRepoForDerive{}
-	svc := NewRelationService(relRepo, instRepo)
+	svc := NewRelationService(relRepo, instRepo, newFakeModelRelRepo(ecsDiskRelationType))
 
 	_, err := svc.CreateBatch(context.Background(), []domain.InstanceRelation{
 		{TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "ecs_disk"},
@@ -88,10 +88,10 @@ func TestRelationCreateBatch_RejectsWhenAnyMissing(t *testing.T) {
 
 func TestRelationCreateBatch_AllowsExistingEndpoints(t *testing.T) {
 	instRepo := newFakeInstanceRepo()
-	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3}
-	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 3}
+	instRepo.instances[1] = domain.Instance{ID: 1, TenantID: 3, ModelUID: "ecs"}
+	instRepo.instances[2] = domain.Instance{ID: 2, TenantID: 3, ModelUID: "disk"}
 	relRepo := &fakeRelationRepoForDerive{}
-	svc := NewRelationService(relRepo, instRepo)
+	svc := NewRelationService(relRepo, instRepo, newFakeModelRelRepo(ecsDiskRelationType))
 
 	if _, err := svc.CreateBatch(context.Background(), []domain.InstanceRelation{
 		{TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "ecs_disk"},

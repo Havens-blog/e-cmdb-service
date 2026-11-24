@@ -302,6 +302,33 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, errs.ErrInstanceNotFound):
 		return ErrorResultWithMsg(errs.ParamsError,
 			"关联的资产不存在或已被删除，请刷新后重试"), true
+	case errors.Is(err, errs.ErrRelationModelMismatch):
+		// 关系类型声明了固定的「源模型 → 目标模型」，两端实例模型必须匹配，
+		// 否则方向与基数语义不成立（实测可用 vpc_subnet 连接两个 host 实例）。
+		// 与相邻分支（统一回 ParamsError 400001）刻意不同：同函数里已存在三个
+		// 「参数不合法」的拒绝理由（重复关系、端点不存在、未选租户），前端只能拿到
+		// 一份笼统文案；模型对不匹配需要在弹窗里区分并高亮「源/目标资产」两个选择框，
+		// 因此独占一个对外 code。代价是这组 code 的前缀不统一，属可见取舍。
+		return ErrorResultWithMsg(errs.RelationModelMismatch,
+			"所选关系类型要求固定的资产类型组合，当前源资产或目标资产的类型不符合，请重新选择"), true
+	case errors.Is(err, errs.ErrInvalidTenantID):
+		// 会话未选择租户时 tenant_id=0，DAO 在 tenantID<=0 时不加租户谓词，
+		// 直接放行会变成跨租户读取 + 无归属写入。
+		// 本路由已挂 middleware.RequireTenant，正常请求到不了这里；此分支保护的是
+		// 不走中间件的直接 service 调用方（定时推导、运维脚本），因此是前瞻性映射而非补洞。
+		return ErrorResultWithMsg(errs.ParamsError,
+			"未选择租户，无法操作实例关系；请先切换到具体租户后重试"), true
+	case errors.Is(err, errs.ErrRelationNotFound):
+		// 与 /model-relations 子组共用同一 sentinel（ErrRelationNotFound → 404003）：
+		// 两者语义都是「关系类型（元数据）不存在」，两套 code 只会让前端多一条分支。
+		//
+		// 注意 sentinel 是复用的：RelationService.GetByID / Delete 在**某条实例关系**
+		// 不存在时也返回 ErrRelationNotFound。那两条路径当前各自就地映射成
+		// 「实例关系不存在或已被删除」，与这里的「关系类型不存在」文案不同。
+		// 若将来把 GetByID/Delete 也接到本函数，必须先在 service 层把两种 not-found
+		// 拆开，否则「某条关系已被删除」会被译成「关系类型不存在」，404 语义错位。
+		return ErrorResultWithMsg(errs.RelationNotFound,
+			"关系类型不存在或已被删除，请刷新后重新选择"), true
 	}
 	return ginx.Result{}, false
 }
@@ -345,7 +372,7 @@ type DeriveInstanceRelationsReq struct {
 func (h *RelationHandler) DeriveInstanceRelations(ctx *gin.Context, req DeriveInstanceRelationsReq) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
 	if tenantID <= 0 {
-		return ErrorResultWithMsg(errs.ParamsError, "tenant not resolved from session"), nil
+		return ErrorResultWithMsg(errs.ParamsError, "未选择租户，无法推导实例关系；请先切换到具体租户后重试"), nil
 	}
 
 	dryRun := true
@@ -355,6 +382,11 @@ func (h *RelationHandler) DeriveInstanceRelations(ctx *gin.Context, req DeriveIn
 
 	result, err := h.relationSvc.DeriveRelations(ctx.Request.Context(), tenantID, req.Rule, dryRun)
 	if err != nil {
+		// 与本文件其余关系写入口共用同一套映射：推导也会因关系类型缺失/租户未选而失败，
+		// 直接回 SystemError + 英文原文会让前端把可修复问题当成服务端故障。
+		if mapped, ok := instanceRelationErrorResult(err); ok {
+			return mapped, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 	return Result(result), nil

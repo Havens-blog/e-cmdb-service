@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/gotomicro/ego/core/elog"
 
@@ -31,27 +32,43 @@ type relationService struct {
 	repo repository.InstanceRelationRepository
 	// instanceRepo 用于推导关系时读取实例（按租户过滤）
 	instanceRepo repository.InstanceRepository
+	// modelRelRepo 用于读取关系类型声明的源/目标模型，创建前校验模型对
+	modelRelRepo repository.ModelRelationTypeRepository
 	logger       *elog.Component
 }
 
 // NewRelationService 创建关系服务
-func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo repository.InstanceRepository) RelationService {
+func NewRelationService(repo repository.InstanceRelationRepository, instanceRepo repository.InstanceRepository, modelRelRepo repository.ModelRelationTypeRepository) RelationService {
 	return &relationService{
 		repo:         repo,
 		instanceRepo: instanceRepo,
+		modelRelRepo: modelRelRepo,
 		logger:       elog.DefaultLogger,
 	}
 }
 
-// validateInstancesExist 校验关系两端实例存在（同租户）。
+// requireSelectedTenant 拒绝「会话未选择租户」的写入（tenantID <= 0）。
+//
+// 缺陷背景（评审指出，2026-11-23）：middleware.GetTenantID 对未选租户的会话返回 0，
+// 而 instanceDAO.ListByIDs 只在 tenantID > 0 时才追加租户谓词。于是 tenant_id=0 的
+// 创建请求会跨所有租户加载实例做校验，并把关系持久化成 tenant_id=0——
+// 既读到了不该读的数据，也写入了一条谁都不归属的关系。
+// 全部写入入口（Create / CreateBatch / DeriveRelations）都必须先过这道守卫；
+// handler 层的 RequireTenant 只保护 HTTP 路由，直接调用 service 的内部路径
+// （如定时推导、运维脚本）没有中间件兜底，不能指望它是安全的。
+func requireSelectedTenant(tenantID int64) error {
+	if tenantID <= 0 {
+		return fmt.Errorf("%w: tenant_id=%d", errs.ErrInvalidTenantID, tenantID)
+	}
+	return nil
+}
+
+// loadEndpointModels 加载关系两端实例的模型 UID（同租户），同时校验每个 id 都存在。
 //
 // 缺陷背景（实测 2026-11-17）：Create 只做查重、不校验端点实例，历史上产生了
 // 8 条两端皆亡的悬空关系（数据质量页 dangling_relation）。删除实例虽已级联解除
 // 关系，但通过 API/批量推送仍可制造新的悬空引用，故在写入前拦截。
-func (s *relationService) validateInstancesExist(ctx context.Context, tenantID int64, ids []int64) error {
-	if s.instanceRepo == nil {
-		return nil
-	}
+func (s *relationService) loadEndpointModels(ctx context.Context, tenantID int64, ids []int64) (map[int64]string, error) {
 	uniq := make([]int64, 0, len(ids))
 	seen := make(map[int64]bool, len(ids))
 	for _, id := range ids {
@@ -63,22 +80,182 @@ func (s *relationService) validateInstancesExist(ctx context.Context, tenantID i
 	}
 	instances, err := s.instanceRepo.ListByIDs(ctx, uniq, tenantID)
 	if err != nil {
-		return fmt.Errorf("failed to check instances existence: %w", err)
+		return nil, fmt.Errorf("failed to check instances existence: %w", err)
 	}
-	found := make(map[int64]bool, len(instances))
+	models := make(map[int64]string, len(instances))
 	for _, inst := range instances {
-		found[inst.ID] = true
+		models[inst.ID] = inst.ModelUID
 	}
 	for _, id := range uniq {
-		if !found[id] {
-			return fmt.Errorf("%w: instance_id=%d", errs.ErrInstanceNotFound, id)
+		if _, ok := models[id]; !ok {
+			return nil, fmt.Errorf("%w: instance_id=%d", errs.ErrInstanceNotFound, id)
+		}
+	}
+	return models, nil
+}
+
+// validateRelationEndpoints 校验关系两端实例存在（同租户）且模型符合关系类型声明。
+//
+// 缺陷背景（实测 2026-11-18）：Create/CreateBatch 此前只校验端点是否存在，
+// 不校验模型对，于是可以用 vpc_subnet（声明 vpc → subnet）把两个 host 实例连起来，
+// 关系的方向与基数语义因此不成立，拓扑与影响分析会给出错误结论。
+// 实测现存 1304 条实例关系全部符合各自关系类型声明的模型对，说明该校验与既有数据兼容。
+func (s *relationService) validateRelationEndpoints(ctx context.Context, relations []domain.InstanceRelation) error {
+	if len(relations) == 0 {
+		return nil
+	}
+	// instanceRepo 缺失时端点存在性与模型对都无从校验。这是「静默关闭本 PR 新增约束」的
+	// 降级路径，必须留痕：早前空声明分支已经会 Warn，同类「无法校验」不应一个出声一个不出声。
+	if s.instanceRepo == nil {
+		s.logger.Warn("未注入实例仓储，跳过关系端点的存在性与模型对校验")
+	}
+	// 模型对校验依赖端点实例的 model_uid，因此 instanceRepo 缺失时两种校验都无从进行，
+	// 统一在这里跳过（原先 modelRelRepo 的 nil 兜底散落在 validateModelPair 里，
+	// 一旦 instanceRepo 为 nil 而 modelRelRepo 非 nil，就会拿空 models 表比对，
+	// 得到 actual=-> 的 mismatch 并拒绝一切写入）。上面的 Warn 已把这次降级记录在案。
+	if s.instanceRepo == nil {
+		return nil
+	}
+	// 一次按租户分组：既收集端点 id，也保留该租户的关系列表。
+	// 早前实现是「对每个租户都重扫一遍 relations」，批量规模 × 租户数时是 O(T×R)。
+	idsByTenant := make(map[int64][]int64, 4)
+	relsByTenant := make(map[int64][]domain.InstanceRelation, 4)
+	for _, rel := range relations {
+		idsByTenant[rel.TenantID] = append(idsByTenant[rel.TenantID], rel.SourceInstanceID, rel.TargetInstanceID)
+		relsByTenant[rel.TenantID] = append(relsByTenant[rel.TenantID], rel)
+	}
+	typeCache := make(map[string]domain.ModelRelationType, len(relations))
+	// 按 tenantID 升序遍历：map 迭代顺序随机，会让「批量里哪一条先被拒绝」跨请求不稳定，
+	// 同一个请求体两次调用可能返回不同的实例 id，前端无法复现、测试也无法断言。
+	tenantIDs := make([]int64, 0, len(idsByTenant))
+	for tenantID := range idsByTenant {
+		tenantIDs = append(tenantIDs, tenantID)
+	}
+	sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
+	// typeCache 刻意是「每请求一份」而不是挂在 service 上长期缓存：关系类型的
+	// source/target 模型是可编辑元数据，跨请求缓存会把刚修好的关系类型继续按旧声明校验。
+	// 单请求内已按 uid 去重，批量里重复引用同一类型只查一次；若将来批量规模显著变大，
+	// 再考虑带失效信号的缓存，而不是直接加长生命周期。
+	for _, tenantID := range tenantIDs {
+		models, err := s.loadEndpointModels(ctx, tenantID, idsByTenant[tenantID])
+		if err != nil {
+			return err
+		}
+		// modelRelRepo 未注入时只保留端点存在性校验，兼容旧装配与既有单测。
+		// 与 validateDeriveCandidate 的降级分支一样留痕：静默关闭约束会让装配漏注入
+		// 在线上只表现为「校验不生效」。
+		if s.modelRelRepo == nil {
+			s.logger.Warn("未注入关系类型仓储，跳过关系端点的模型对校验")
+			continue
+		}
+		for _, rel := range relsByTenant[tenantID] {
+			if err := s.validateModelPair(ctx, rel, models, typeCache); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
+// validateModelPair 校验单条关系两端的模型与关系类型声明一致。
+// 调用方（validateRelationEndpoints）已保证 instanceRepo 与 modelRelRepo 均非 nil，
+// 且 models 覆盖本条关系的两端实例，这里不再做 nil 兜底，避免两处条件漂移。
+func (s *relationService) validateModelPair(
+	ctx context.Context,
+	rel domain.InstanceRelation,
+	models map[int64]string,
+	cache map[string]domain.ModelRelationType,
+) error {
+	relType, cached := cache[rel.RelationTypeUID]
+	// firstLoad 只用于「未完整声明」告警的去重：批量里同一关系类型有 N 条关系时，
+	// 逐条打点会把同一条信息刷 N 遍，噪声随批量规模线性放大。
+	firstLoad := !cached
+	if !cached {
+		loaded, err := s.modelRelRepo.GetByUID(ctx, rel.RelationTypeUID)
+		if err != nil {
+			return fmt.Errorf("failed to load relation type %q: %w", rel.RelationTypeUID, err)
+		}
+		if loaded.ID == 0 {
+			// 复用 ErrRelationNotFound（404003）：与 /model-relations 子组同一语义同一 code，
+			// 另立 sentinel 只会让前端多一条不可区分的分支。
+			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrRelationNotFound, rel.RelationTypeUID)
+		}
+		relType = loaded
+		cache[rel.RelationTypeUID] = loaded
+	}
+	// 历史数据里存在「声明为空」的关系类型（Validate 会拒新写入，但可以早于校验存在），
+	// 未声明的一侧无从比对，照常比对会把任何真实实例都判 mismatch，等于把一个元数据
+	// 瑕疵变成全量写入阻塞。因此**只跳过未声明的那一侧**：单侧有声明时仍用它拦住明显
+	// 错误（例如只声明了 target=subnet，却想把 host 连到 host）。
+	// 端点存在性已在 loadEndpointModels 校验；元数据问题留给关系类型编辑面去修。
+	sourceModel := models[rel.SourceInstanceID]
+	targetModel := models[rel.TargetInstanceID]
+	if firstLoad && (relType.SourceModelUID == "" || relType.TargetModelUID == "") {
+		s.logger.Warn("关系类型未完整声明源/目标模型，仅用已声明的一侧做模型对校验",
+			elog.String("relation_type_uid", relType.UID),
+			elog.String("source_model_uid", relType.SourceModelUID),
+			elog.String("target_model_uid", relType.TargetModelUID))
+	}
+	if relType.SourceModelUID != "" && sourceModel != relType.SourceModelUID {
+		return relationModelMismatchError(rel, relType, sourceModel, targetModel)
+	}
+	if relType.TargetModelUID != "" && targetModel != relType.TargetModelUID {
+		return relationModelMismatchError(rel, relType, sourceModel, targetModel)
+	}
+	return nil
+}
+
+// relationModelMismatchError 统一构造模型对不匹配的错误（带上两端 instance_id 便于定位）。
+func relationModelMismatchError(
+	rel domain.InstanceRelation,
+	relType domain.ModelRelationType,
+	sourceModel string,
+	targetModel string,
+) error {
+	// 批量创建时整体拒绝，必须能定位到具体条目，因此带上两端 instance_id。
+	return fmt.Errorf("%w: relation_type=%s source_instance_id=%d target_instance_id=%d declared=%s->%s actual=%s->%s",
+		errs.ErrRelationModelMismatch, rel.RelationTypeUID, rel.SourceInstanceID, rel.TargetInstanceID,
+		relType.SourceModelUID, relType.TargetModelUID, sourceModel, targetModel)
+}
+
+// validateDeriveCandidate 用与 Create 相同的模型对规则校验一条推导候选。
+//
+// 推导候选的端点实例来自本方法刚读出的 ecs/disk 列表（同租户），因此不需要再查库，
+// 直接把 id→model_uid 传进来即可。
+//
+// 降级语义与 validateRelationEndpoints 一致：两个依赖任一缺失都只能跳过校验
+// （instanceRepo 缺失时 models 为空表，硬比对会误拒一切写入；modelRelRepo 缺失时
+// 拿不到声明）。跳过即「本 PR 引入的约束被静默关闭」，因此每条降级路径都必须留痕，
+// 否则装配漏注入时线上只表现为「校验不生效」，无从排查。
+func (s *relationService) validateDeriveCandidate(
+	ctx context.Context,
+	c domain.RelationCandidate,
+	models map[int64]string,
+	cache map[string]domain.ModelRelationType,
+) error {
+	// 依赖缺失时与 validateRelationEndpoints 保持同一口径：两者都不可用时整段跳过
+	// （前者无从得知端点模型，后者无从得知声明），只缺一个则仍能做一半校验，
+	// 交给 validateModelPair 内部的空声明分支处理。
+	if s.instanceRepo == nil {
+		s.logger.Warn("未注入实例仓储，跳过推导候选的模型对校验（端点存在性由 DeriveRelations 的列表查询保证）")
+		return nil
+	}
+	if s.modelRelRepo == nil {
+		s.logger.Warn("未注入关系类型仓储，跳过推导候选的模型对校验（关系类型声明无从读取）")
+		return nil
+	}
+	return s.validateModelPair(ctx, domain.InstanceRelation{
+		SourceInstanceID: c.SourceInstanceID,
+		TargetInstanceID: c.TargetInstanceID,
+		RelationTypeUID:  c.RelationTypeUID,
+	}, models, cache)
+}
+
 func (s *relationService) Create(ctx context.Context, relation domain.InstanceRelation) (int64, error) {
-	if err := s.validateInstancesExist(ctx, relation.TenantID, []int64{relation.SourceInstanceID, relation.TargetInstanceID}); err != nil {
+	if err := requireSelectedTenant(relation.TenantID); err != nil {
+		return 0, err
+	}
+	if err := s.validateRelationEndpoints(ctx, []domain.InstanceRelation{relation}); err != nil {
 		return 0, err
 	}
 	exists, err := s.repo.Exists(ctx, relation.TenantID, relation.SourceInstanceID, relation.TargetInstanceID, relation.RelationTypeUID)
@@ -96,15 +273,14 @@ func (s *relationService) CreateBatch(ctx context.Context, relations []domain.In
 	if len(relations) == 0 {
 		return 0, nil
 	}
-	// 每条关系按各自租户校验端点；全部通过才写入，避免部分写入产生悬空引用
-	idsByTenant := make(map[int64][]int64, 4)
-	for _, r := range relations {
-		idsByTenant[r.TenantID] = append(idsByTenant[r.TenantID], r.SourceInstanceID, r.TargetInstanceID)
-	}
-	for tenantID, ids := range idsByTenant {
-		if err := s.validateInstancesExist(ctx, tenantID, ids); err != nil {
-			return 0, err
+	for _, rel := range relations {
+		if err := requireSelectedTenant(rel.TenantID); err != nil {
+			return 0, fmt.Errorf("relation[source=%d target=%d]: %w", rel.SourceInstanceID, rel.TargetInstanceID, err)
 		}
+	}
+	// 校验端点存在性与模型对（按租户聚合）；全部通过才写入，避免部分写入产生非法关系
+	if err := s.validateRelationEndpoints(ctx, relations); err != nil {
+		return 0, err
 	}
 	return s.repo.CreateBatch(ctx, relations)
 }
@@ -229,6 +405,13 @@ func (s *relationService) DeriveRelations(
 ) (domain.DeriveResult, error) {
 	result := domain.DeriveResult{DryRun: dryRun}
 
+	// 推导是写入入口之一，必须与 Create/CreateBatch 过同一道租户守卫：
+	// tenant_id=0 会让 List 丢掉租户谓词、把关系写成无归属，这条路径没有
+	// handler 的 RequireTenant 兜底（定时任务/脚本会直接调用 service）。
+	if guardErr := requireSelectedTenant(tenantID); guardErr != nil {
+		return result, guardErr
+	}
+
 	if rule != "" && rule != "ecs_disk" {
 		return result, fmt.Errorf("%w: 不支持的推导规则 %q（当前仅支持 ecs_disk）", errs.ErrInvalidRelation, rule)
 	}
@@ -248,6 +431,39 @@ func (s *relationService) DeriveRelations(
 	}
 
 	candidates, stats := domain.DeriveEcsDisk(ecsList, diskList, "ecs_disk")
+
+	// 与 Create/CreateBatch 共用同一套模型对校验：**推导不是绕过校验的旁路**。
+	// 早前 DeriveRelations 直接 s.repo.Create，于是 POST 会拒绝的关系（关系类型声明被改、
+	// 或声明缺失）仍能被推导写进库，本 PR 想关掉的入口等于还开着。
+	// 语义选择：推导是批量修复动作，单条不合法只跳过该条并留痕，不整批回滚
+	// （整批拒绝会让一次元数据瑕疵阻断所有租户的正常推导）。
+	models := make(map[int64]string, len(ecsList)+len(diskList))
+	for _, inst := range ecsList {
+		models[inst.ID] = inst.ModelUID
+	}
+	for _, inst := range diskList {
+		models[inst.ID] = inst.ModelUID
+	}
+	pairCache := make(map[string]domain.ModelRelationType, 1)
+	valid := make([]domain.RelationCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		pairErr := s.validateDeriveCandidate(ctx, c, models, pairCache)
+		if pairErr != nil {
+			stats.SkippedInvalid++
+			s.logger.Warn("推导的关系不符合关系类型声明，已跳过",
+				elog.String("relation_type", c.RelationTypeUID),
+				elog.Int64("source", c.SourceInstanceID),
+				elog.Int64("target", c.TargetInstanceID),
+				elog.FieldErr(pairErr))
+			continue
+		}
+		valid = append(valid, c)
+	}
+	candidates = valid
+	// 过滤后必须回填候选数：DeriveStats 直接序列化进 API 响应（json:"candidate"），
+	// 若保留 DeriveEcsDisk 预过滤的计数，会出现「candidate=10 但实际只写 7 条」的失衡，
+	// 让调用方误以为剩余 3 条被静默丢弃。
+	stats.Candidate = len(valid)
 
 	if dryRun {
 		// 仅统计已存在数量，不写入

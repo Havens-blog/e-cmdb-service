@@ -50,4 +50,52 @@ func TestInstanceRelationErrorResult(t *testing.T) {
 			t.Fatal("nil 错误不应被拦截")
 		}
 	})
+	t.Run("模型对不匹配回独立 code 与中文提示", func(t *testing.T) {
+		wrapped := fmt.Errorf("%w: relation_type=vpc_subnet", errs.ErrRelationModelMismatch)
+		result, ok := instanceRelationErrorResult(wrapped)
+		if !ok {
+			t.Fatal("包装后的 ErrRelationModelMismatch 应被识别")
+		}
+		// 与相邻分支不同：该理由需要前端高亮两端资产选择框，因此独占一个对外 code。
+		if result.Code != errs.RelationModelMismatch.Code {
+			t.Fatalf("code = %d, want %d", result.Code, errs.RelationModelMismatch.Code)
+		}
+		if !strings.Contains(result.Msg, "资产类型") {
+			t.Fatalf("提示应说明资产类型不符合，实际 %q", result.Msg)
+		}
+	})
+
+	t.Run("未选择租户给出中文提示", func(t *testing.T) {
+		wrapped := fmt.Errorf("%w: tenant_id=0", errs.ErrInvalidTenantID)
+		result, ok := instanceRelationErrorResult(wrapped)
+		if !ok {
+			t.Fatal("包装后的 ErrInvalidTenantID 应被识别")
+		}
+		if result.Code != errs.ParamsError.Code {
+			t.Fatalf("code = %d, want %d", result.Code, errs.ParamsError.Code)
+		}
+		if !strings.Contains(result.Msg, "未选择租户") {
+			t.Fatalf("提示应说明未选择租户，实际 %q", result.Msg)
+		}
+	})
+
+	t.Run("关系类型不存在回 404 段 code", func(t *testing.T) {
+		wrapped := fmt.Errorf("%w: relation_type_uid=ecs_disk", errs.ErrRelationNotFound)
+		result, ok := instanceRelationErrorResult(wrapped)
+		if !ok {
+			t.Fatal("包装后的 ErrRelationNotFound 应被识别")
+		}
+		// *NotFound 语义归 404 段，前端据此判断「资源不存在」而不是「参数不合法」；
+		// 与 /model-relations 子组共用同一 code，避免同一语义分裂成两个编号。
+		if result.Code != errs.RelationNotFound.Code {
+			t.Fatalf("code = %d, want %d", result.Code, errs.RelationNotFound.Code)
+		}
+		if result.Code < 404000 || result.Code >= 405000 {
+			t.Fatalf("code = %d 应落在 404 段", result.Code)
+		}
+		if !strings.Contains(result.Msg, "关系类型不存在") {
+			t.Fatalf("提示应说明关系类型不存在，实际 %q", result.Msg)
+		}
+	})
+
 }
