@@ -49,8 +49,10 @@ var (
 	//   400011/400012                    「关系类型引用的源/目标模型不存在」（#77）
 	//   400013 RelationModelMismatch     本错误
 	//   400014 AttributeInUse            删除在用字段被拒（#78）
-	//   400015 ModelRelationTypeNotFound 关系类型不存在（下面那个）
-	// 600xxx 段不连续是刻意的：每个语义独占一个对外 code，避免前端按 code 分支时撞号。
+	// 编号刻意不连续：每个语义独占一个对外 code，避免前端按 code 分支时撞号。
+	// 「关系类型不存在」属 *NotFound 语义，按本包既有约定（ModelNotFound=404001、
+	// InstanceNotFound=404002、RelationNotFound=404003、AttributeNotFound=404004…）
+	// 归 404 段而不是 400 段，见下面的 ModelRelationTypeNotFound。
 	RelationModelMismatch = ErrorCode{Code: 400013, Msg: "relation model mismatch"}
 	// ModelRelationTypeNotFound: 关系类型（模型关系元数据）不存在。原先复用
 	// RelationInvalid（400004），但该 sentinel 同时被 DeriveRelations 用来表示
@@ -58,7 +60,9 @@ var (
 	// 「关系类型不存在」的误导文案。
 	// 命名刻意带 Model 前缀：与实例关系侧的 ErrRelationNotFound 区分，避免在
 	// instanceRelationErrorResult 里两个「not found」互相误匹配。
-	ModelRelationTypeNotFound = ErrorCode{Code: 400015, Msg: "relation type not found"}
+	// 编号取 404008（404 段的 *NotFound 序列），而不是 400015：前端按 code 的
+	// 4xx 前缀判断「资源不存在」时，400 段会被读成参数校验失败。
+	ModelRelationTypeNotFound = ErrorCode{Code: 404008, Msg: "relation type not found"}
 )
 
 // 属性相关错误码

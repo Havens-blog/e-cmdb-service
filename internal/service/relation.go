@@ -176,21 +176,34 @@ func (s *relationService) validateModelPair(
 		cache[rel.RelationTypeUID] = loaded
 	}
 	// 历史数据里存在「声明为空」的关系类型（Validate 会拒新写入，但可以早于校验存在），
-	// 若照常比对，任何真实实例都会被判 mismatch，等于把一个元数据瑕疵变成全量写入阻塞。
-	// 这种情况只跳过模型对校验（端点存在性已在 loadEndpointModels 校验），
-	// 让调用方仍能建立关系，元数据问题留给关系类型编辑面去修。
+	// 未声明的一侧无从比对，照常比对会把任何真实实例都判 mismatch，等于把一个元数据
+	// 瑕疵变成全量写入阻塞。因此**只跳过未声明的那一侧**：单侧有声明时仍用它拦住明显
+	// 错误（例如只声明了 target=subnet，却想把 host 连到 host）。
+	// 端点存在性已在 loadEndpointModels 校验；元数据问题留给关系类型编辑面去修。
+	sourceModel := models[rel.SourceInstanceID]
+	targetModel := models[rel.TargetInstanceID]
 	if relType.SourceModelUID == "" || relType.TargetModelUID == "" {
-		s.logger.Warn("关系类型未声明源/目标模型，跳过模型对校验",
+		s.logger.Warn("关系类型未完整声明源/目标模型，仅用已声明的一侧做模型对校验",
 			elog.String("relation_type_uid", relType.UID),
 			elog.String("source_model_uid", relType.SourceModelUID),
 			elog.String("target_model_uid", relType.TargetModelUID))
-		return nil
 	}
-	sourceModel := models[rel.SourceInstanceID]
-	targetModel := models[rel.TargetInstanceID]
-	if sourceModel == relType.SourceModelUID && targetModel == relType.TargetModelUID {
-		return nil
+	if relType.SourceModelUID != "" && sourceModel != relType.SourceModelUID {
+		return relationModelMismatchError(rel, relType, sourceModel, targetModel)
 	}
+	if relType.TargetModelUID != "" && targetModel != relType.TargetModelUID {
+		return relationModelMismatchError(rel, relType, sourceModel, targetModel)
+	}
+	return nil
+}
+
+// relationModelMismatchError 统一构造模型对不匹配的错误（带上两端 instance_id 便于定位）。
+func relationModelMismatchError(
+	rel domain.InstanceRelation,
+	relType domain.ModelRelationType,
+	sourceModel string,
+	targetModel string,
+) error {
 	// 批量创建时整体拒绝，必须能定位到具体条目，因此带上两端 instance_id。
 	return fmt.Errorf("%w: relation_type=%s source_instance_id=%d target_instance_id=%d declared=%s->%s actual=%s->%s",
 		errs.ErrRelationModelMismatch, rel.RelationTypeUID, rel.SourceInstanceID, rel.TargetInstanceID,
@@ -208,6 +221,9 @@ func (s *relationService) validateDeriveCandidate(
 	models map[int64]string,
 	cache map[string]domain.ModelRelationType,
 ) error {
+	// 依赖缺失时与 validateRelationEndpoints 保持同一口径：两者都不可用时整段跳过
+	// （前者无从得知端点模型，后者无从得知声明），只缺一个则仍能做一半校验，
+	// 交给 validateModelPair 内部的空声明分支处理。
 	if s.instanceRepo == nil || s.modelRelRepo == nil {
 		return nil
 	}
@@ -427,6 +443,10 @@ func (s *relationService) DeriveRelations(
 		valid = append(valid, c)
 	}
 	candidates = valid
+	// 过滤后必须回填候选数：DeriveStats 直接序列化进 API 响应（json:"candidate"），
+	// 若保留 DeriveEcsDisk 预过滤的计数，会出现「candidate=10 但实际只写 7 条」的失衡，
+	// 让调用方误以为剩余 3 条被静默丢弃。
+	stats.Candidate = len(valid)
 
 	if dryRun {
 		// 仅统计已存在数量，不写入

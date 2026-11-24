@@ -305,6 +305,10 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, errs.ErrRelationModelMismatch):
 		// 关系类型声明了固定的「源模型 → 目标模型」，两端实例模型必须匹配，
 		// 否则方向与基数语义不成立（实测可用 vpc_subnet 连接两个 host 实例）。
+		// 与相邻分支（统一回 ParamsError 400001）刻意不同：同函数里已存在三个
+		// 「参数不合法」的拒绝理由（重复关系、端点不存在、未选租户），前端只能拿到
+		// 一份笼统文案；模型对不匹配需要在弹窗里区分并高亮「源/目标资产」两个选择框，
+		// 因此独占一个对外 code。代价是这组 code 的前缀不统一，属可见取舍。
 		return ErrorResultWithMsg(errs.RelationModelMismatch,
 			"所选关系类型要求固定的资产类型组合，当前源资产或目标资产的类型不符合，请重新选择"), true
 	case errors.Is(err, errs.ErrInvalidTenantID):
