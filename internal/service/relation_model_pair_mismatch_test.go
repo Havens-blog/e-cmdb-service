@@ -92,7 +92,7 @@ func TestRelationCreate_RejectsUnknownRelationType(t *testing.T) {
 
 	if _, err := svc.Create(context.Background(), domain.InstanceRelation{
 		TenantID: 3, SourceInstanceID: 1, TargetInstanceID: 2, RelationTypeUID: "zz_no_such_type",
-	}); !errors.Is(err, errs.ErrModelRelationTypeNotFound) {
+	}); !errors.Is(err, errs.ErrRelationNotFound) {
 		t.Fatalf("未知关系类型应拒绝，err = %v", err)
 	}
 	if len(relRepo.created) != 0 {

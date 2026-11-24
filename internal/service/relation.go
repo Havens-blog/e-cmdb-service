@@ -163,14 +163,19 @@ func (s *relationService) validateModelPair(
 	models map[int64]string,
 	cache map[string]domain.ModelRelationType,
 ) error {
-	relType, ok := cache[rel.RelationTypeUID]
-	if !ok {
+	relType, cached := cache[rel.RelationTypeUID]
+	// firstLoad 只用于「未完整声明」告警的去重：批量里同一关系类型有 N 条关系时，
+	// 逐条打点会把同一条信息刷 N 遍，噪声随批量规模线性放大。
+	firstLoad := !cached
+	if !cached {
 		loaded, err := s.modelRelRepo.GetByUID(ctx, rel.RelationTypeUID)
 		if err != nil {
 			return fmt.Errorf("failed to load relation type %q: %w", rel.RelationTypeUID, err)
 		}
 		if loaded.ID == 0 {
-			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrModelRelationTypeNotFound, rel.RelationTypeUID)
+			// 复用 ErrRelationNotFound（404003）：与 /model-relations 子组同一语义同一 code，
+			// 另立 sentinel 只会让前端多一条不可区分的分支。
+			return fmt.Errorf("%w: relation_type_uid=%s", errs.ErrRelationNotFound, rel.RelationTypeUID)
 		}
 		relType = loaded
 		cache[rel.RelationTypeUID] = loaded
@@ -182,7 +187,7 @@ func (s *relationService) validateModelPair(
 	// 端点存在性已在 loadEndpointModels 校验；元数据问题留给关系类型编辑面去修。
 	sourceModel := models[rel.SourceInstanceID]
 	targetModel := models[rel.TargetInstanceID]
-	if relType.SourceModelUID == "" || relType.TargetModelUID == "" {
+	if firstLoad && (relType.SourceModelUID == "" || relType.TargetModelUID == "") {
 		s.logger.Warn("关系类型未完整声明源/目标模型，仅用已声明的一侧做模型对校验",
 			elog.String("relation_type_uid", relType.UID),
 			elog.String("source_model_uid", relType.SourceModelUID),

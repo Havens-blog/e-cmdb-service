@@ -80,14 +80,15 @@ func TestInstanceRelationErrorResult(t *testing.T) {
 	})
 
 	t.Run("关系类型不存在回 404 段 code", func(t *testing.T) {
-		wrapped := fmt.Errorf("%w: relation_type_uid=ecs_disk", errs.ErrModelRelationTypeNotFound)
+		wrapped := fmt.Errorf("%w: relation_type_uid=ecs_disk", errs.ErrRelationNotFound)
 		result, ok := instanceRelationErrorResult(wrapped)
 		if !ok {
-			t.Fatal("包装后的 ErrModelRelationTypeNotFound 应被识别")
+			t.Fatal("包装后的 ErrRelationNotFound 应被识别")
 		}
-		// *NotFound 语义归 404 段，前端据此判断「资源不存在」而不是「参数不合法」。
-		if result.Code != errs.ModelRelationTypeNotFound.Code {
-			t.Fatalf("code = %d, want %d", result.Code, errs.ModelRelationTypeNotFound.Code)
+		// *NotFound 语义归 404 段，前端据此判断「资源不存在」而不是「参数不合法」；
+		// 与 /model-relations 子组共用同一 code，避免同一语义分裂成两个编号。
+		if result.Code != errs.RelationNotFound.Code {
+			t.Fatalf("code = %d, want %d", result.Code, errs.RelationNotFound.Code)
 		}
 		if result.Code < 404000 || result.Code >= 405000 {
 			t.Fatalf("code = %d 应落在 404 段", result.Code)

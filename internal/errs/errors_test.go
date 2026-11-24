@@ -33,7 +33,6 @@ func TestErrorCodeUnique(t *testing.T) {
 		{"RelationExists", RelationExists},
 		{"RelationInvalid", RelationInvalid},
 		{"RelationModelMismatch", RelationModelMismatch},
-		{"ModelRelationTypeNotFound", ModelRelationTypeNotFound},
 		{"AttributeNotFound", AttributeNotFound},
 		{"AttributeExists", AttributeExists},
 		{"AttributeInvalid", AttributeInvalid},

@@ -318,10 +318,10 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 		// 不走中间件的直接 service 调用方（定时推导、运维脚本），因此是前瞻性映射而非补洞。
 		return ErrorResultWithMsg(errs.ParamsError,
 			"未选择租户，无法操作实例关系；请先切换到具体租户后重试"), true
-	case errors.Is(err, errs.ErrModelRelationTypeNotFound):
-		// 独立 sentinel：ErrInvalidRelation 在 service 层还表示「不支持的推导规则」，
-		// 两者共用会让推导请求被回成「关系类型不存在」。
-		return ErrorResultWithMsg(errs.ModelRelationTypeNotFound,
+	case errors.Is(err, errs.ErrRelationNotFound):
+		// 与 /model-relations 子组共用同一 sentinel（ErrRelationNotFound → 404003）：
+		// 两者语义都是「关系类型（元数据）不存在」，两套 code 只会让前端多一条分支。
+		return ErrorResultWithMsg(errs.RelationNotFound,
 			"关系类型不存在或已被删除，请刷新后重新选择"), true
 	}
 	return ginx.Result{}, false
@@ -366,7 +366,7 @@ type DeriveInstanceRelationsReq struct {
 func (h *RelationHandler) DeriveInstanceRelations(ctx *gin.Context, req DeriveInstanceRelationsReq) (ginx.Result, error) {
 	tenantID := middleware.GetTenantID(ctx)
 	if tenantID <= 0 {
-		return ErrorResultWithMsg(errs.ParamsError, "tenant not resolved from session"), nil
+		return ErrorResultWithMsg(errs.ParamsError, "未选择租户，无法推导实例关系；请先切换到具体租户后重试"), nil
 	}
 
 	dryRun := true
@@ -376,6 +376,11 @@ func (h *RelationHandler) DeriveInstanceRelations(ctx *gin.Context, req DeriveIn
 
 	result, err := h.relationSvc.DeriveRelations(ctx.Request.Context(), tenantID, req.Rule, dryRun)
 	if err != nil {
+		// 与本文件其余关系写入口共用同一套映射：推导也会因关系类型缺失/租户未选而失败，
+		// 直接回 SystemError + 英文原文会让前端把可修复问题当成服务端故障。
+		if mapped, ok := instanceRelationErrorResult(err); ok {
+			return mapped, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 	return Result(result), nil
