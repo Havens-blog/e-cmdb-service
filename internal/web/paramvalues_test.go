@@ -205,6 +205,8 @@ func TestParamValueRejectionsEndToEnd(t *testing.T) {
 	r.GET("/quality/issues", ginx.Wrap(qh.Issues))
 	r.GET("/quality/field-issues", ginx.Wrap(qh.FieldIssues))
 	r.GET("/quality/sync-issues", ginx.Wrap(qh.SyncIssues))
+	r.GET("/quality/overview", ginx.Wrap(qh.Overview))
+	r.GET("/quality/orphan-sources", ginx.Wrap(qh.OrphanSources))
 
 	// void 族：HTTP 400 + 信封
 	http400 := []struct {
@@ -240,6 +242,10 @@ func TestParamValueRejectionsEndToEnd(t *testing.T) {
 		{"/quality/issues?type=zzz", []string{"type", "zzz", "orphan_instance", "field-issues"}},
 		{"/quality/field-issues?issue_type=zzz", []string{"issue_type", "zzz", "field_enum"}},
 		{"/quality/sync-issues?issue_type=zzz", []string{"issue_type", "zzz", "required"}},
+		// 这两个端点不接受任何参数：此前 ?limit=abc、?offset=1&limit=1 被静默忽略
+		// 并返回完整数据，调用方会误以为自己传的分页生效了。
+		{"/quality/overview?limit=abc", []string{"limit"}},
+		{"/quality/orphan-sources?offset=1&limit=1", []string{"offset", "limit"}},
 	}
 	for _, tc := range envelope {
 		tc := tc

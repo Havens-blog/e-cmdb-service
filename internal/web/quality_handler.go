@@ -42,6 +42,9 @@ func (h *QualityHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 // Overview 数据质量概览。
 func (h *QualityHandler) Overview(ctx *gin.Context) (ginx.Result, error) {
+	if res, bad := guardQueryParams(ctx, qualityOverviewParamSet); bad {
+		return res, nil
+	}
 	tenantID := middleware.GetTenantID(ctx)
 
 	data, err := h.svc.Overview(ctx.Request.Context(), tenantID)
@@ -146,6 +149,9 @@ func (h *QualityHandler) SyncIssues(ctx *gin.Context) (ginx.Result, error) {
 // 两者都无法回答「这些孤儿主要是哪些模型缺失造成的」。
 // 本接口直接返回按 model_uid 聚合的降序列表，让运维知道该补齐哪些模型。
 func (h *QualityHandler) OrphanSources(ctx *gin.Context) (ginx.Result, error) {
+	if res, bad := guardQueryParams(ctx, qualityOrphanSourcesParamSet); bad {
+		return res, nil
+	}
 	tenantID := middleware.GetTenantID(ctx)
 
 	data, err := h.svc.OrphanSources(ctx.Request.Context(), tenantID)

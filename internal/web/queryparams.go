@@ -130,6 +130,19 @@ var (
 	instanceRelationListParamSet = newParamSet("offset", "limit",
 		"source_instance_id", "target_instance_id", "relation_type_uid")
 
+	// GET /cmdb/quality/overview —— 概览不接受任何参数。
+	//
+	// 为什么也要收口：它返回的是「按当前租户聚合的整份概览」，没有分页也没有筛选。
+	// 之前 ?limit=abc、?offset=1&limit=1 都被静默忽略并返回完整数据，调用方会误以为
+	// 自己传的分页/筛选生效了（同模块 /quality/issues 等端点早已 400，口径不一致）。
+	qualityOverviewParamSet = newParamSet()
+
+	// GET /cmdb/quality/orphan-sources —— 孤儿来源分布不接受任何参数。
+	//
+	// 该接口按缺失模型聚合后一次性返回全部分组（当前 48 个 / 8621 条），没有分页；
+	// 之前 ?limit=abc、?offset=1&limit=1 同样被静默忽略并返回全量，属同一类误解风险。
+	qualityOrphanSourcesParamSet = newParamSet()
+
 	// GET /cmdb/quality/issues
 	qualityIssuesParamSet = newParamSet("offset", "limit", "type")
 
