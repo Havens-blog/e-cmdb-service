@@ -142,7 +142,10 @@ func (s *relationService) validateRelationEndpoints(ctx context.Context, relatio
 			return err
 		}
 		// modelRelRepo 未注入时只保留端点存在性校验，兼容旧装配与既有单测。
+		// 与 validateDeriveCandidate 的降级分支一样留痕：静默关闭约束会让装配漏注入
+		// 在线上只表现为「校验不生效」。
 		if s.modelRelRepo == nil {
+			s.logger.Warn("未注入关系类型仓储，跳过关系端点的模型对校验")
 			continue
 		}
 		for _, rel := range relsByTenant[tenantID] {
@@ -218,8 +221,12 @@ func relationModelMismatchError(
 // validateDeriveCandidate 用与 Create 相同的模型对规则校验一条推导候选。
 //
 // 推导候选的端点实例来自本方法刚读出的 ecs/disk 列表（同租户），因此不需要再查库，
-// 直接把 id→model_uid 传进来即可；两种依赖未注入时保持与 validateRelationEndpoints
-// 一致的降级语义（跳过校验），由调用方决定是否留痕。
+// 直接把 id→model_uid 传进来即可。
+//
+// 降级语义与 validateRelationEndpoints 一致：两个依赖任一缺失都只能跳过校验
+// （instanceRepo 缺失时 models 为空表，硬比对会误拒一切写入；modelRelRepo 缺失时
+// 拿不到声明）。跳过即「本 PR 引入的约束被静默关闭」，因此每条降级路径都必须留痕，
+// 否则装配漏注入时线上只表现为「校验不生效」，无从排查。
 func (s *relationService) validateDeriveCandidate(
 	ctx context.Context,
 	c domain.RelationCandidate,
@@ -229,7 +236,12 @@ func (s *relationService) validateDeriveCandidate(
 	// 依赖缺失时与 validateRelationEndpoints 保持同一口径：两者都不可用时整段跳过
 	// （前者无从得知端点模型，后者无从得知声明），只缺一个则仍能做一半校验，
 	// 交给 validateModelPair 内部的空声明分支处理。
-	if s.instanceRepo == nil || s.modelRelRepo == nil {
+	if s.instanceRepo == nil {
+		s.logger.Warn("未注入实例仓储，跳过推导候选的模型对校验（端点存在性由 DeriveRelations 的列表查询保证）")
+		return nil
+	}
+	if s.modelRelRepo == nil {
+		s.logger.Warn("未注入关系类型仓储，跳过推导候选的模型对校验（关系类型声明无从读取）")
 		return nil
 	}
 	return s.validateModelPair(ctx, domain.InstanceRelation{

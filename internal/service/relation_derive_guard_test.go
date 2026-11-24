@@ -80,3 +80,36 @@ func TestDeriveRelations_StoresCandidatesMatchingDeclaration(t *testing.T) {
 		t.Fatalf("声明匹配时不应有跳过: %+v", res.Rules)
 	}
 }
+
+// TestDeriveRelations_NoModelRelRepoStillWrites 锁定「依赖漏注入不得拦住正常推导」。
+//
+// 缺陷背景（评审指出，2026-11-24）：validateDeriveCandidate 的降级条件与注释相悖——
+// 注释说「只缺一个仍能做一半校验」，实现却是 instanceRepo 或 modelRelRepo 任一为 nil
+// 就整体跳过。两个依赖缺失时都只能跳过（instanceRepo 缺失时 models 为空表、硬比对会
+// 误拒一切；modelRelRepo 缺失时拿不到声明），因此行为本身正确，需要锁定的是：
+// 降级时**不得**把候选判成 skipped_invalid（那会让推导静默无产出），并且两条降级
+// 路径各自留痕（日志无法在单测里断言，这里用行为锁定可见结果）。
+func TestDeriveRelations_NoModelRelRepoStillWrites(t *testing.T) {
+	instRepo := newFakeInstanceRepo()
+	instRepo.listByModel = map[string][]domain.Instance{
+		"ecs":  {{ID: 100, AssetID: "i-a", ModelUID: "ecs"}},
+		"disk": {{ID: 200, AssetID: "d-1", ModelUID: "disk", Attributes: map[string]interface{}{"instance_id": "i-a"}}},
+	}
+	relRepo := &fakeRelationRepoForDerive{}
+	// modelRelRepo 传 nil：模拟装配漏注入关系类型仓储。
+	svc := NewRelationService(relRepo, instRepo, nil)
+
+	res, err := svc.DeriveRelations(context.Background(), 3, "ecs_disk", false)
+	if err != nil {
+		t.Fatalf("依赖缺失属降级而非错误，推导应照常成功: %v", err)
+	}
+	if len(relRepo.created) != 1 || relRepo.created[0].TenantID != 3 {
+		t.Fatalf("降级时仍应写入 1 条且带租户: %+v", relRepo.created)
+	}
+	if len(res.Rules) != 1 || res.Rules[0].SkippedInvalid != 0 {
+		t.Fatalf("降级不得把候选判成 skipped_invalid: %+v", res.Rules)
+	}
+	if res.Rules[0].Candidate != 1 {
+		t.Fatalf("候选数应回填为 1，实际 %+v", res.Rules[0])
+	}
+}

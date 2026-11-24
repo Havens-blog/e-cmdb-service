@@ -321,6 +321,12 @@ func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 	case errors.Is(err, errs.ErrRelationNotFound):
 		// 与 /model-relations 子组共用同一 sentinel（ErrRelationNotFound → 404003）：
 		// 两者语义都是「关系类型（元数据）不存在」，两套 code 只会让前端多一条分支。
+		//
+		// 注意 sentinel 是复用的：RelationService.GetByID / Delete 在**某条实例关系**
+		// 不存在时也返回 ErrRelationNotFound。那两条路径当前各自就地映射成
+		// 「实例关系不存在或已被删除」，与这里的「关系类型不存在」文案不同。
+		// 若将来把 GetByID/Delete 也接到本函数，必须先在 service 层把两种 not-found
+		// 拆开，否则「某条关系已被删除」会被译成「关系类型不存在」，404 语义错位。
 		return ErrorResultWithMsg(errs.RelationNotFound,
 			"关系类型不存在或已被删除，请刷新后重新选择"), true
 	}

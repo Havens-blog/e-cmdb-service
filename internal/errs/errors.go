@@ -26,7 +26,8 @@ var (
 	RelationTypeInUse = ErrorCode{Code: 400010, Msg: "relation type is in use by instance relations, cannot delete"}
 	// AttributeInUse：字段仍被实例数据使用，不能删除。
 	// 与 ModelHasInstances / RelationTypeInUse 同族（「被引用不可删」语义）。
-	// 注：400011–400013 已被在途分支预留（关系类型引用的源/目标模型不存在、实例关系模型对不匹配）。
+	// 注：400011–400012 由 #77（关系类型引用的源/目标模型不存在）占用；400013 由本文件的
+	// RelationModelMismatch 占用；400014 即本错误。
 	AttributeInUse = ErrorCode{Code: 400014, Msg: "attribute in use by instances, cannot delete"}
 )
 
