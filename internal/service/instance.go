@@ -603,32 +603,90 @@ func (s *instanceService) detachRelations(ctx context.Context, tenantID int64, i
 		elog.Int64("tenant_id", tenantID), elog.Int64("instance_id", instanceID))
 }
 
+// instanceAccountEndpoint 是「按账号删除」时待清理关系的实例端点。
+//
+// 关系仓储的 DeleteByInstanceID 按 `tenant_id` 精确匹配，
+// 所以解绑必须带上实例自身的租户；只带实例 ID 会退化成 tenant 0 而删不掉任何关系。
+type instanceAccountEndpoint struct {
+	tenantID   int64
+	instanceID int64
+}
+
 // DeleteByAccountID 按云账号批量删除实例。
 //
 // 该路径删除的是**一批**实例，若不清理关系会一次性产生大量悬空关系，
 // 危害比单条删除更大。因此先取出待删实例 ID，删除后再逐个解除关系。
 func (s *instanceService) DeleteByAccountID(ctx context.Context, accountID int64) error {
-	// 先收集受影响实例（用于清理关系）；取不到不影响删除本身
-	var ids []int64
+	// 先收集受影响实例（用于清理关系）；取不到不影响删除本身。
+	//
+	// 必须连同实例自身的 tenant_id 一起收集：关系仓储按 `tenant_id + 实例 ID`
+	// 精确匹配删除（见 dao.DeleteByInstanceID），传 0 会一条都删不掉。
+	// 背景：此前这里硬编码 detachRelations(ctx, 0, id)，于是「按账号删除实例」
+	// 永远不会清理关系 —— 线上可观察到「关系的一端存活、另一端已被删除」的悬空关系，
+	// 且质量页的 dangling_relation_count 由此从 0 变 1。具体实例 ID 不入库内注释。
+	var endpoints []instanceAccountEndpoint
 	if s.relationRepo != nil {
-		if list, err := s.repo.List(ctx, domain.InstanceFilter{AccountID: accountID, Limit: 100000}); err != nil {
-			s.logger.Warn("按账号删除前查询实例列表失败，将跳过关系清理",
-				elog.Int64("account_id", accountID), elog.FieldErr(err))
-		} else {
-			for _, inst := range list {
-				ids = append(ids, inst.ID)
-			}
-		}
+		endpoints = s.collectAccountEndpoints(ctx, accountID)
 	}
 
 	if err := s.repo.DeleteByAccountID(ctx, accountID); err != nil {
 		return err
 	}
 
-	for _, id := range ids {
-		s.detachRelations(ctx, 0, id)
+	for _, ep := range endpoints {
+		s.detachRelations(ctx, ep.tenantID, ep.instanceID)
 	}
 	return nil
+}
+
+// accountDetachPageSize 是「按账号删除」收集待解绑实例的分页大小。
+//
+// 不能用一次 `Limit: 100000` 了事：`DeleteByAccountID` 本身按 account_id 无上限删除，
+// 而 List 带 limit 时只返回前 N 条，超出部分被删掉却不会被解绑 —— 又留下一批悬空关系，
+// 且日志里看不出异常（正是本缺陷要消除的那类静默残留）。
+const accountDetachPageSize = 5000
+
+// accountDetachMaxPages 是分页收集的安全上限（1,000 万实例），仅用于防死循环。
+const accountDetachMaxPages = 2000
+
+// collectAccountEndpoints 分页收集某云账号下所有实例的 (tenant_id, instance_id)。
+//
+// 中途查询失败时保留已收集到的端点：这些实例同样会被删除，先把已知关系清掉，
+// 比整批放弃更接近「不留悬空关系」的目标；缺口通过 Warn 暴露。
+func (s *instanceService) collectAccountEndpoints(ctx context.Context, accountID int64) []instanceAccountEndpoint {
+	var endpoints []instanceAccountEndpoint
+	for page := 0; page < accountDetachMaxPages; page++ {
+		offset := int64(page) * accountDetachPageSize
+		// 排序字段必须显式指定为唯一键 id：DAO 的默认排序是 ctime 倒序，而
+		// ctime 在批量同步/导入下大量并列，MongoDB 对并列键不保证跨查询顺序稳定，
+		// offset 分页的页边界会漂移 —— 被跳过的实例照样被删掉却不会解绑关系，
+		// 正好复现本函数要消除的那类静默悬空关系。
+		list, err := s.repo.List(ctx, domain.InstanceFilter{
+			AccountID: accountID,
+			Offset:    offset,
+			Limit:     accountDetachPageSize,
+			SortBy:    "id",
+			SortDesc:  false,
+		})
+		if err != nil {
+			s.logger.Warn("按账号删除前查询实例列表失败，关系清理将只覆盖已收集到的实例",
+				elog.Int64("account_id", accountID),
+				elog.Int64("collected", int64(len(endpoints))),
+				elog.FieldErr(err))
+			return endpoints
+		}
+		for _, inst := range list {
+			endpoints = append(endpoints, instanceAccountEndpoint{tenantID: inst.TenantID, instanceID: inst.ID})
+		}
+		if len(list) < accountDetachPageSize {
+			return endpoints
+		}
+	}
+	s.logger.Warn("按账号删除前收集实例达到分页上限，可能存在关系清理盲区",
+		elog.Int64("account_id", accountID),
+		elog.Int64("collected", int64(len(endpoints))),
+		elog.Int("max_pages", accountDetachMaxPages))
+	return endpoints
 }
 
 func (s *instanceService) Upsert(ctx context.Context, instance domain.Instance) error {
