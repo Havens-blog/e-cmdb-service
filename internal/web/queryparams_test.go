@@ -110,11 +110,16 @@ func TestGuardQueryParams_ReturnsResult(t *testing.T) {
 	}
 }
 
-// TestListParamSetsMatchHandlerReads 锁定「白名单 = 处理器真正读取的参数」。
+// TestListParamSetsMatchHandlerReads 锁定每个端点的参数白名单。
 //
-// 这张表是刻意硬编码的：处理器新增一个 ctx.Query("x") 而忘了加进白名单，
-// 会让新参数被 400 拒绝（这里会失败）；反过来白名单里塞了处理器不读的参数，
-// 会重新制造「接受但不生效」的静默陷阱（同样在这里失败）。
+// 这张表是刻意硬编码的，覆盖两件事：
+//  1. 非零白名单：条数与 mustHas 一致且逐个命中，防止「白名单里塞了处理器不读的
+//     参数」重新制造「接受但不生效」的静默陷阱；
+//  2. 零参数端点（mustHas 为空）：白名单必须为空。
+//
+// 反向风险——处理器读了某个参数却没进白名单——本表查不出来（表只能验证白名单侧），
+// 由两处兜住：TestListEndpointsRejectUnknownParamEndToEnd 用 ?bogus=1 证明「任何
+// 白名单外参数都会被 400 拒绝」，以及 handler 侧新增 ctx.Query 时的 diff review。
 func TestListParamSetsMatchHandlerReads(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -145,6 +150,16 @@ func TestListParamSetsMatchHandlerReads(t *testing.T) {
 			name:    "instance-relations",
 			set:     instanceRelationListParamSet,
 			mustHas: []string{"offset", "limit", "source_instance_id", "target_instance_id", "relation_type_uid"},
+		},
+		{
+			name:    "quality-overview",
+			set:     qualityOverviewParamSet,
+			mustHas: []string{},
+		},
+		{
+			name:    "quality-orphan-sources",
+			set:     qualityOrphanSourcesParamSet,
+			mustHas: []string{},
 		},
 		{
 			name:    "quality-issues",
@@ -239,6 +254,8 @@ func TestListEndpointsRejectUnknownParamEndToEnd(t *testing.T) {
 	r.GET("/quality/issues", ginx.Wrap(qh.Issues))
 	r.GET("/quality/field-issues", ginx.Wrap(qh.FieldIssues))
 	r.GET("/quality/sync-issues", ginx.Wrap(qh.SyncIssues))
+	r.GET("/quality/overview", ginx.Wrap(qh.Overview))
+	r.GET("/quality/orphan-sources", ginx.Wrap(qh.OrphanSources))
 	r.GET("/impact", ginx.Wrap(ih.GetImpact))
 
 	http400 := []string{
@@ -246,7 +263,8 @@ func TestListEndpointsRejectUnknownParamEndToEnd(t *testing.T) {
 		"/model-relations", "/instance-relations",
 	}
 	envelope := []string{
-		"/quality/issues", "/quality/field-issues", "/quality/sync-issues", "/impact",
+		"/quality/issues", "/quality/field-issues", "/quality/sync-issues",
+		"/quality/overview", "/quality/orphan-sources", "/impact",
 	}
 
 	for _, p := range http400 {
