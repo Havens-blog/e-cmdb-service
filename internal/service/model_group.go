@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/domain"
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
 	"github.com/Havens-blog/e-cmdb-service/internal/repository"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // ModelGroupService 模型分组服务接口
@@ -38,6 +41,10 @@ func NewModelGroupService(
 }
 
 func (s *modelGroupService) Create(ctx context.Context, group domain.ModelGroup) (int64, error) {
+	if err := normalizeModelGroup(&group); err != nil {
+		return 0, err
+	}
+
 	// 检查UID是否已存在
 	existing, err := s.groupRepo.GetByUID(ctx, group.UID)
 	if err != nil {
@@ -51,6 +58,10 @@ func (s *modelGroupService) Create(ctx context.Context, group domain.ModelGroup)
 }
 
 func (s *modelGroupService) Update(ctx context.Context, group domain.ModelGroup) error {
+	if err := normalizeModelGroup(&group); err != nil {
+		return err
+	}
+
 	existing, err := s.groupRepo.GetByUID(ctx, group.UID)
 	if err != nil {
 		return fmt.Errorf("failed to get group: %w", err)
@@ -65,7 +76,16 @@ func (s *modelGroupService) Update(ctx context.Context, group domain.ModelGroup)
 		group.SortOrder = existing.SortOrder
 	}
 
-	return s.groupRepo.Update(ctx, group)
+	if err := s.groupRepo.Update(ctx, group); err != nil {
+		// 读快照到写入之间分组被删：DAO 用 MatchedCount==0 报告，这里翻成 404 语义。
+		// 该 read-modify-write 本身不带版本号，并发 PUT 仍是后写覆盖，
+		// 但至少「目标行已消失」不再伪装成成功。
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errs.ErrModelGroupNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *modelGroupService) Delete(ctx context.Context, uid string) error {
@@ -190,4 +210,30 @@ func (s *modelGroupService) ListWithModels(ctx context.Context) ([]domain.ModelG
 
 func (s *modelGroupService) InitBuiltinGroups(ctx context.Context) error {
 	return s.groupRepo.InitBuiltinGroups(ctx)
+}
+
+// normalizeModelGroup 裁剪并校验分组必填项。
+//
+// gin 的 binding:"required" 只拒绝空串，单个空格能通过绑定；Web 层现在会先
+// TrimSpace，若这里不再判一次非空，" " 会被裁剪成空串后直接落库（比落一个
+// 空格更糟：UI 上会出现一个看不见名字的分组）。所以裁剪与判空必须成对出现在
+// 服务层，不依赖调用方。
+func normalizeModelGroup(group *domain.ModelGroup) error {
+	if group == nil {
+		return errs.ErrModelGroupInvalid
+	}
+
+	group.UID = strings.TrimSpace(group.UID)
+	group.Name = strings.TrimSpace(group.Name)
+	group.Icon = strings.TrimSpace(group.Icon)
+	group.Description = strings.TrimSpace(group.Description)
+
+	if group.UID == "" {
+		return errs.ErrInvalidModelGroupUID
+	}
+	if group.Name == "" {
+		return errs.ErrInvalidModelGroupName
+	}
+
+	return nil
 }

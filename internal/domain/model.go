@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Havens-blog/e-cmdb-service/internal/errs"
@@ -35,8 +36,32 @@ type ModelFilter struct {
 	Limit        int
 }
 
-// Validate 验证模型数据
+// Validate 验证模型数据。
+//
+// Normalize 裁剪所有会被落库的文本字段，并回写到接收者。
+// 归一集中到这里，是因为校验路径（Validate）与「只改部分字段」的更新路径
+// （service.Update 不能用 Validate，见其注释）都会落库，两处各写一份裁剪清单
+// 会随字段增加而漂移：早前 Update 与 Validate 各裁 5 个字段、都漏了 ParentUID，
+// 于是 parent_uid=" " 能落库，IsTopLevel()/IsSubModel() 双双为 false，模型层级自相矛盾。
+//
+// 生效范围：ParentUID / Provider 目前只在 Create 落库（DAO 的 Update $set 白名单不含
+// parent_uid/provider，更新接口也无法改这两项），这里裁剪它们是为 Create 与内存判定
+// （IsTopLevel/IsSubModel）服务；若将来把这两列纳入可更新白名单，裁剪已就位。
+func (m *Model) Normalize() {
+	m.UID = strings.TrimSpace(m.UID)
+	m.Name = strings.TrimSpace(m.Name)
+	m.Category = strings.TrimSpace(m.Category)
+	m.Icon = strings.TrimSpace(m.Icon)
+	m.Description = strings.TrimSpace(m.Description)
+	m.ParentUID = strings.TrimSpace(m.ParentUID)
+	m.Provider = strings.TrimSpace(m.Provider)
+}
+
+// Validate 先归一（Normalize）再判空：gin 的 binding:"required" 只拒绝空字符串，
+// 实测 uid/name/category 传单个空格可以通过校验直接落库（模型列表里出现一个没有名字的空卡片）。
+// 归一后回写接收者，保证后续唯一性检查与落库使用同一个规范化后的 UID。
 func (m *Model) Validate() error {
+	m.Normalize()
 	if m.UID == "" {
 		return errs.ErrInvalidModelUID
 	}

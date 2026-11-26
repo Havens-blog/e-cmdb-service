@@ -110,10 +110,13 @@ var (
 	// ErrAttributeInUse 由 service.AttributeInUseError 通过 Is 方法匹配。
 	ErrAttributeInUse = errors.New("attribute in use by instances")
 
-	ErrModelGroupNotFound  = errors.New("model group not found")
-	ErrModelGroupExists    = errors.New("model group already exists")
-	ErrGroupHasModels      = errors.New("group has models, cannot delete")
-	ErrCannotDeleteBuiltin = errors.New("cannot delete builtin group")
+	ErrModelGroupInvalid     = errors.New("model group invalid")
+	ErrInvalidModelGroupUID  = errors.New("model group uid cannot be empty")
+	ErrInvalidModelGroupName = errors.New("model group name cannot be empty")
+	ErrModelGroupNotFound    = errors.New("model group not found")
+	ErrModelGroupExists      = errors.New("model group already exists")
+	ErrGroupHasModels        = errors.New("group has models, cannot delete")
+	ErrCannotDeleteBuiltin   = errors.New("cannot delete builtin group")
 
 	// 属性相关错误
 	ErrInvalidAttributeUID   = errors.New("attribute uid cannot be empty")
