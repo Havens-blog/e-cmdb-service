@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/Havens-blog/e-common-go/ginx"
 	"github.com/gin-gonic/gin"
@@ -170,14 +171,58 @@ func (h *RelationHandler) CreateModelRelation(ctx *gin.Context, req CreateModelR
 
 	id, err := h.modelRelSvc.Create(ctx.Request.Context(), rel)
 	if err != nil {
-		if err == errs.ErrRelationExists {
-			return ErrorResultWithMsg(errs.ParamsError,
-				"该关系类型已存在：源模型、目标模型与关系类型不能重复定义"), nil
+		if result, ok := modelRelationTypeErrorResult(err); ok {
+			return result, nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
 	return Result(map[string]interface{}{"id": id}), nil
+}
+
+// modelRelationTypeErrorResult 把模型关系类型的业务拒绝翻成中文可读原因。
+//
+// 为什么需要：agent 之前这些分支要么返回英文哨兵（"relation already exists"），
+// 要么把「引用了已删除的模型」这类明确原因折成 500 system error，
+// 前端只能弹「操作失败」，用户无法判断该改哪个模型或换哪个类型。
+// 未知错误返回 ok=false，交给上层回落，避免吞掉真正的系统错误。
+//
+// 分支可达性（Create / Update 共用本函数，避免维护者误判某条规则已在两条路径生效）：
+//   - ErrRelationExists：仅 Create 可达（uid 查重）。Update 目前不做 (源,目标,类型) 三元组查重，
+//     所以编辑时把一条类型改成与另一条同名同向的定义不会被拦；这里保留分支，
+//     待 Update 增加三元组查重后自动生效。
+//   - ErrRelationNotFound：仅 Get/Update/Delete 可达（Create 先 Exists 查重，不会走到该哨兵）。
+//   - 源/目标模型不存在、UID/名称/模型为空：Create 与 Update 均可达
+//     （Update 侧仅当本次改动了对应的模型引用时才会校验，见 service.ensureChangedModelsExist）。
+func modelRelationTypeErrorResult(err error) (ginx.Result, bool) {
+	switch {
+	case errors.Is(err, errs.ErrRelationExists):
+		// 查重口径是 UID（repo.Exists(ctx, rel.UID)），不是 (源,目标,类型) 三元组，
+		// 文案不能承诺实现没有做的规则——否则用户会以为「换个 UID 就能重复定义」被系统允许。
+		return ErrorResultWithMsg(errs.RelationExists,
+			"该关系类型已存在：关系类型的 UID 不能重复，请换一个标识"), true
+	case errors.Is(err, errs.ErrRelationSourceModelNotFound):
+		return ErrorResultWithMsg(errs.RelationSourceModelNotFound,
+			"源模型不存在或已被删除，请刷新模型列表后重新选择"), true
+	case errors.Is(err, errs.ErrRelationTargetModelNotFound):
+		return ErrorResultWithMsg(errs.RelationTargetModelNotFound,
+			"目标模型不存在或已被删除，请刷新模型列表后重新选择"), true
+	case errors.Is(err, domain.ErrInvalidRelationTypeUID):
+		return ErrorResultWithMsg(errs.RelationInvalid, "关系类型标识（UID）不能为空"), true
+	case errors.Is(err, domain.ErrInvalidRelationName):
+		// Update 是「合并后的完整对象」：若库里的历史名称是空白（本 PR 修复前可写入 " "），
+		// 只改描述的 PUT 也会命中这里。提示里要点明这一可能，否则用户会反复重试同一请求。
+		return ErrorResultWithMsg(errs.RelationInvalid,
+			"关系类型名称不能为空：若该关系类型的历史名称为空白，请在本次编辑中一并填写名称"), true
+	case errors.Is(err, domain.ErrInvalidRelationModel):
+		return ErrorResultWithMsg(errs.RelationInvalid, "源模型与目标模型都必须选择"), true
+	case errors.Is(err, errs.ErrRelationNotFound):
+		// service.Update/Delete 在 Exists=false（含 GET 与 PUT 之间被并发删除的窗口）时返回该哨兵；
+		// 不映射会落到上层 errs.SystemError(500001) + 英文原文，正是本 helper 要消除的折叠。
+		return ErrorResultWithMsg(errs.RelationNotFound,
+			"关系类型不存在或已被删除，请刷新后重试"), true
+	}
+	return ginx.Result{}, false
 }
 
 func (h *RelationHandler) ListModelRelations(ctx *gin.Context) {
@@ -236,27 +281,51 @@ func (h *RelationHandler) UpdateModelRelation(ctx *gin.Context, req UpdateModelR
 
 	existing, err := h.modelRelSvc.GetByUID(ctx.Request.Context(), uid)
 	if err != nil {
-		if err == errs.ErrRelationNotFound {
+		// 这里用 errors.Is 而非 == 是前瞻性防御：当前 GetByUID 在 rel.ID == 0 时返回的是
+		// 裸哨兵，== 也能命中；但服务层其它查询路径已经用 %w 包装过哨兵，
+		// 一旦这层也改成包装，== 会静默失配并回落 500，届时只能靠重现才发现。
+		if errors.Is(err, errs.ErrRelationNotFound) {
 			return ErrorResult(errs.RelationNotFound), nil
 		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
-	if req.Name != "" {
-		existing.Name = req.Name
+	// 部分更新语义：只有显式带上「裁剪后非空」的值才覆盖，缺失字段保留旧值。
+	//
+	// 契约声明：UpdateModelRelationReq 的四个文本字段都是非指针 string，
+	// 因此「省略」与「显式传空串」在这里无法区分，二者都按「保留旧值」处理——
+	// **本接口不支持显式清空描述/标签**。需要清空时传一个空格之外的占位文案后再改，
+	// 或走后续引入的可空 DTO。这是一处对外可见的语义，改 DTO 前不要单方面变更。
+	//
+	// 四个字段用同一套规则（裁剪 → 判空 → 覆盖），原因分别是：
+	// - Name 裁后为空：用户其实想清空名称，但名称是必填项，覆盖后会由 Validate 拒绝；
+	//   忽略它、保留旧名才是「部分更新」的正确语义，不误伤只想改描述的调用。
+	//   注意这里只覆盖「请求里的空值」：合并后的对象会交给 domain.Validate，
+	//   所以若库里的旧名本身就是空白（本 PR 修复前可写入 " "）且本次也没带有效名称，
+	//   请求会被 Validate 以「关系类型名称不能为空」拒绝，而不是静默保留空白名——
+	//   即部分更新对正常数据宽容、对历史脏数据要求顺带修正，这是刻意的（见 Update 契约注释）。
+	// - SourceToTarget / TargetToSource 会作为拓扑边的双向标签展示，
+	//   Description 会在详情里展示；若按「非空即写入原始串」处理，
+	//   用户传 "   " 就会把标签改成一片空白，与 Name 的处理口径也不一致。
+	if name := strings.TrimSpace(req.Name); name != "" {
+		existing.Name = name
 	}
-	if req.SourceToTarget != "" {
-		existing.SourceToTarget = req.SourceToTarget
+	if v := strings.TrimSpace(req.SourceToTarget); v != "" {
+		existing.SourceToTarget = v
 	}
-	if req.TargetToSource != "" {
-		existing.TargetToSource = req.TargetToSource
+	if v := strings.TrimSpace(req.TargetToSource); v != "" {
+		existing.TargetToSource = v
 	}
-	if req.Description != "" {
-		existing.Description = req.Description
+	if v := strings.TrimSpace(req.Description); v != "" {
+		existing.Description = v
 	}
 
 	err = h.modelRelSvc.Update(ctx.Request.Context(), existing)
 	if err != nil {
+		// 名称空白、引用模型不存在这类规则错误要给 400 + 中文原因，不能被兜底成 500
+		if result, ok := modelRelationTypeErrorResult(err); ok {
+			return result, nil
+		}
 		return ErrorResultWithMsg(errs.SystemError, err.Error()), nil
 	}
 
@@ -297,7 +366,10 @@ func (h *RelationHandler) DeleteModelRelation(ctx *gin.Context) {
 func instanceRelationErrorResult(err error) (ginx.Result, bool) {
 	switch {
 	case errors.Is(err, errs.ErrRelationExists):
-		return ErrorResultWithMsg(errs.ParamsError,
+		// 与 modelRelationTypeErrorResult 的「已存在」用同一个语义码（409 冲突）。
+		// 两个 helper 曾分别给 400001 与 409003：同一种「已存在」在不同入口返回不同 code，
+		// 前端按 code 做「刷新列表 / 提示已存在」判定时会分叉，只能靠文案匹配，容易漏。
+		return ErrorResultWithMsg(errs.RelationExists,
 			"该关联关系已存在：源资产与目标资产之间不能重复创建同一关系"), true
 	case errors.Is(err, errs.ErrInstanceNotFound):
 		return ErrorResultWithMsg(errs.ParamsError,

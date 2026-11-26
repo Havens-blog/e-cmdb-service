@@ -75,7 +75,7 @@ func (c *instRelCounter) Count(_ context.Context, filter domain.InstanceRelation
 func newServiceForDeleteGuard(types map[string]bool, relCount int64, relErr error) (ModelRelationTypeService, *relTypeDeleteRepo, *instRelCounter) {
 	repo := &relTypeDeleteRepo{exists: types}
 	counter := &instRelCounter{count: relCount, err: relErr}
-	return NewModelRelationTypeService(repo, counter), repo, counter
+	return NewModelRelationTypeService(repo, counter, nil), repo, counter
 }
 
 // TestModelRelationTypeDelete_RejectsWhenInUse 锁定本轮缺陷：
@@ -168,7 +168,7 @@ func TestModelRelationTypeDelete_CountFailureDoesNotDelete(t *testing.T) {
 // 此时跳过引用统计，保持删除可用。
 func TestModelRelationTypeDelete_NilRelationRepo(t *testing.T) {
 	repo := &relTypeDeleteRepo{exists: map[string]bool{"zz_rel_nil": true}}
-	svc := NewModelRelationTypeService(repo, nil)
+	svc := NewModelRelationTypeService(repo, nil, nil)
 
 	if err := svc.Delete(context.Background(), "zz_rel_nil"); err != nil {
 		t.Fatalf("未注入关系仓储时应允许删除，实际 %v", err)

@@ -42,6 +42,20 @@ var (
 	RelationNotFound = ErrorCode{Code: 404003, Msg: "relation not found"}
 	RelationExists   = ErrorCode{Code: 409003, Msg: "relation already exists"}
 	RelationInvalid  = ErrorCode{Code: 400004, Msg: "relation invalid"}
+
+	// 关系类型引用的模型不存在。
+	//
+	// 为什么需要：`domain.ModelRelationType.Validate()` 只判 source/target 非空字符串，
+	// 服务层 Create 也只查关系类型 UID 是否重复，从不校验这两个模型 uid 是否存在。
+	// 于是直调 API（或并发删掉模型后拿旧页面提交）能造出「引用不存在模型」的关系类型——
+	// 实测 iter272：POST /cmdb/model-relations 传 source=zz_no_such_source、
+	// target=zz_no_such_target 回 200 并落库（id=84），随后在实例关系页选中该类型，
+	// 源/目标资产按 `uid=cloud_ecs` 这种不存在的模型检索，候选永远为 0，用户无从完成操作。
+	// 存量 28 条关系类型里已有 1 条此类脏数据（ecs_belong_to_vpc → cloud_ecs/cloud_vpc）。
+	//
+	// 400011/400012 是与 PR #75（关系模型对校验，占用 400010）错开预留的编号。
+	RelationSourceModelNotFound = ErrorCode{Code: 400011, Msg: "relation source model not found"}
+	RelationTargetModelNotFound = ErrorCode{Code: 400012, Msg: "relation target model not found"}
 )
 
 // 属性相关错误码
@@ -86,6 +100,10 @@ var (
 	ErrRelationNotFound = errors.New("relation not found")
 	ErrRelationExists   = errors.New("relation already exists")
 	ErrInvalidRelation  = errors.New("invalid relation")
+
+	// 关系类型引用的模型不存在（见上面 RelationSourceModelNotFound 的注释）。
+	ErrRelationSourceModelNotFound = errors.New("relation source model not found")
+	ErrRelationTargetModelNotFound = errors.New("relation target model not found")
 
 	ErrAttributeNotFound = errors.New("attribute not found")
 	ErrAttributeExists   = errors.New("attribute already exists")

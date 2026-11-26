@@ -1,0 +1,428 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/Havens-blog/e-cmdb-service/internal/domain"
+	"github.com/Havens-blog/e-cmdb-service/internal/errs"
+)
+
+// refModelRepo 只实现关系类型创建时用到的那一个方法所需的语义：
+// 按 uid 返回模型，未命中返回零值（ID==0），与 dao 层「查不到就是空结构」一致。
+type refModelRepo struct {
+	byUID map[string]domain.Model
+	err   error
+}
+
+func (f *refModelRepo) Create(context.Context, domain.Model) (int64, error) { return 0, nil }
+
+func (f *refModelRepo) GetByUID(_ context.Context, uid string) (domain.Model, error) {
+	if f.err != nil {
+		return domain.Model{}, f.err
+	}
+	return f.byUID[uid], nil
+}
+
+func (f *refModelRepo) GetByID(context.Context, int64) (domain.Model, error) {
+	return domain.Model{}, nil
+}
+
+func (f *refModelRepo) List(context.Context, domain.ModelFilter) ([]domain.Model, error) {
+	return nil, nil
+}
+
+func (f *refModelRepo) Count(context.Context, domain.ModelFilter) (int64, error) { return 0, nil }
+
+func (f *refModelRepo) Update(context.Context, domain.Model) error { return nil }
+
+func (f *refModelRepo) Delete(context.Context, string) error { return nil }
+
+// modelsWith 构造一个只含指定 uid 的模型仓储，供引用校验用例使用。
+// 未列出的 uid 查不到（ID==0），等价于「该模型已被删除」。
+func modelsWith(uids ...string) *refModelRepo {
+	byUID := make(map[string]domain.Model, len(uids))
+	for i, uid := range uids {
+		byUID[uid] = domain.Model{ID: int64(i + 1), UID: uid, Name: uid}
+	}
+	return &refModelRepo{byUID: byUID}
+}
+
+// refRelationRepo 记录 Create 是否被调用，用来证明「校验失败时不落库」。
+//
+// stored 用于模拟库里的既有行：Update 的引用校验是「按本次改动的边逐侧执行」，
+// 需要与库中值比对才能判断某侧到底有没有变（见 service.ensureChangedModelsExist）。
+type refRelationRepo struct {
+	existing  map[string]bool
+	stored    *domain.ModelRelationType
+	created   []domain.ModelRelationType
+	updated   []domain.ModelRelationType
+	createErr error
+	existsErr error
+}
+
+func (f *refRelationRepo) Create(_ context.Context, rel domain.ModelRelationType) (int64, error) {
+	if f.createErr != nil {
+		return 0, f.createErr
+	}
+	f.created = append(f.created, rel)
+	return int64(len(f.created)), nil
+}
+
+func (f *refRelationRepo) GetByUID(_ context.Context, uid string) (domain.ModelRelationType, error) {
+	if f.stored != nil {
+		return *f.stored, nil
+	}
+	return domain.ModelRelationType{UID: uid, ID: 1}, nil
+}
+
+func (f *refRelationRepo) List(context.Context, domain.ModelRelationTypeFilter) ([]domain.ModelRelationType, error) {
+	return nil, nil
+}
+
+func (f *refRelationRepo) Count(context.Context, domain.ModelRelationTypeFilter) (int64, error) {
+	return 0, nil
+}
+
+func (f *refRelationRepo) Update(_ context.Context, rel domain.ModelRelationType) error {
+	f.updated = append(f.updated, rel)
+	return nil
+}
+
+func (f *refRelationRepo) Delete(context.Context, string) error { return nil }
+
+func (f *refRelationRepo) Exists(_ context.Context, uid string) (bool, error) {
+	if f.existsErr != nil {
+		return false, f.existsErr
+	}
+	return f.existing[uid], nil
+}
+
+func (f *refRelationRepo) FindByModels(_ context.Context, _, _ string) ([]domain.ModelRelationType, error) {
+	return nil, nil
+}
+
+func newRefService(modelRepo *refModelRepo, relRepo *refRelationRepo) ModelRelationTypeService {
+	return NewModelRelationTypeService(relRepo, nil, modelRepo)
+}
+
+func validRelation() domain.ModelRelationType {
+	return domain.ModelRelationType{
+		UID:            "zz_test_ecs_disk",
+		Name:           "测试：云服务器挂载云盘",
+		SourceModelUID: "ecs",
+		TargetModelUID: "disk",
+		RelationType:   domain.RelationTypeContains,
+		Direction:      domain.RelationDirectionOneToMany,
+	}
+}
+
+// TestCreateRelationType_RejectsMissingModels 复现 iter272 的缺陷：
+// 创建时若源/目标模型不存在，必须在服务层拒绝且不落库。
+func TestCreateRelationType_RejectsMissingModels(t *testing.T) {
+	models := &refModelRepo{byUID: map[string]domain.Model{
+		"ecs":  {ID: 1, UID: "ecs"},
+		"disk": {ID: 2, UID: "disk"},
+	}}
+
+	t.Run("源模型不存在", func(t *testing.T) {
+		rels := &refRelationRepo{}
+		svc := newRefService(models, rels)
+		rel := validRelation()
+		rel.SourceModelUID = "cloud_ecs"
+
+		_, err := svc.Create(context.Background(), rel)
+		if !errors.Is(err, errs.ErrRelationSourceModelNotFound) {
+			t.Fatalf("期望 ErrRelationSourceModelNotFound，实际 %v", err)
+		}
+		if len(rels.created) != 0 {
+			t.Fatalf("校验失败不应落库，实际写入 %d 条", len(rels.created))
+		}
+	})
+
+	t.Run("目标模型不存在", func(t *testing.T) {
+		rels := &refRelationRepo{}
+		svc := newRefService(models, rels)
+		rel := validRelation()
+		rel.TargetModelUID = "cloud_vpc"
+
+		_, err := svc.Create(context.Background(), rel)
+		if !errors.Is(err, errs.ErrRelationTargetModelNotFound) {
+			t.Fatalf("期望 ErrRelationTargetModelNotFound，实际 %v", err)
+		}
+		if len(rels.created) != 0 {
+			t.Fatalf("校验失败不应落库，实际写入 %d 条", len(rels.created))
+		}
+	})
+
+	t.Run("两端都不存在时先报源模型", func(t *testing.T) {
+		svc := newRefService(models, &refRelationRepo{})
+		rel := validRelation()
+		rel.SourceModelUID = "zz_no_src"
+		rel.TargetModelUID = "zz_no_tgt"
+
+		_, err := svc.Create(context.Background(), rel)
+		if !errors.Is(err, errs.ErrRelationSourceModelNotFound) {
+			t.Fatalf("期望先报源模型，实际 %v", err)
+		}
+		// 契约：错误只带裸哨兵，标识只进日志 —— 这条错误可能被 handler 兜成 5xx
+		// 并把 err.Error() 原样暴露给调用方，不能把内部标识泄漏进响应体。
+		if strings.Contains(err.Error(), "zz_no_src") {
+			t.Fatalf("错误信息不应带 uid，实际 %v", err)
+		}
+	})
+}
+
+// TestCreateRelationType_AcceptsExistingModels 正常路径不被新校验挡住。
+func TestCreateRelationType_AcceptsExistingModels(t *testing.T) {
+	models := &refModelRepo{byUID: map[string]domain.Model{
+		"ecs":  {ID: 1, UID: "ecs"},
+		"disk": {ID: 2, UID: "disk"},
+	}}
+	rels := &refRelationRepo{}
+	svc := newRefService(models, rels)
+
+	id, err := svc.Create(context.Background(), validRelation())
+	if err != nil {
+		t.Fatalf("期望创建成功，实际 %v", err)
+	}
+	if id == 0 || len(rels.created) != 1 {
+		t.Fatalf("期望落库 1 条，实际 id=%d created=%d", id, len(rels.created))
+	}
+	if rels.created[0].SourceModelUID != "ecs" || rels.created[0].TargetModelUID != "disk" {
+		t.Fatalf("落库的模型对不符：%+v", rels.created[0])
+	}
+}
+
+// TestCreateRelationType_TrimsWhitespace 单项空格曾能绕过 binding:"required" 落库成 " "。
+func TestCreateRelationType_TrimsWhitespace(t *testing.T) {
+	models := &refModelRepo{byUID: map[string]domain.Model{
+		"ecs":  {ID: 1, UID: "ecs"},
+		"disk": {ID: 2, UID: "disk"},
+	}}
+	rels := &refRelationRepo{}
+	svc := newRefService(models, rels)
+
+	rel := validRelation()
+	rel.UID = "  zz_test_trim  "
+	rel.SourceModelUID = "  ecs  "
+	rel.TargetModelUID = " disk "
+	rel.Name = "  裁剪测试  "
+
+	if _, err := svc.Create(context.Background(), rel); err != nil {
+		t.Fatalf("期望创建成功，实际 %v", err)
+	}
+	got := rels.created[0]
+	if got.UID != "zz_test_trim" || got.SourceModelUID != "ecs" || got.TargetModelUID != "disk" || got.Name != "裁剪测试" {
+		t.Fatalf("落库值未裁剪：%+v", got)
+	}
+}
+
+// TestCreateRelationType_RejectsBlankAfterTrim 裁剪后变空串必须被 Validate 拦下。
+func TestCreateRelationType_RejectsBlankAfterTrim(t *testing.T) {
+	svc := newRefService(&refModelRepo{byUID: map[string]domain.Model{}}, &refRelationRepo{})
+
+	rel := validRelation()
+	rel.UID = "   "
+	_, err := svc.Create(context.Background(), rel)
+	if !errors.Is(err, domain.ErrInvalidRelationTypeUID) {
+		t.Fatalf("期望 ErrInvalidRelationTypeUID，实际 %v", err)
+	}
+
+	rel = validRelation()
+	rel.SourceModelUID = "   "
+	_, err = svc.Create(context.Background(), rel)
+	if !errors.Is(err, domain.ErrInvalidRelationModel) {
+		t.Fatalf("期望 ErrInvalidRelationModel，实际 %v", err)
+	}
+
+	// Name 同样要在裁剪后判空：binding:"required" 放行纯空格，
+	// 否则会落库成「名字为空白」的关系类型（与本次要修的脏数据同类）。
+	rel = validRelation()
+	rel.Name = "   "
+	_, err = svc.Create(context.Background(), rel)
+	if !errors.Is(err, domain.ErrInvalidRelationName) {
+		t.Fatalf("期望 ErrInvalidRelationName，实际 %v", err)
+	}
+}
+
+// TestCreateRelationType_DuplicateUIDStillRejected 新校验不得掩盖原有重复检查。
+func TestCreateRelationType_DuplicateUIDStillRejected(t *testing.T) {
+	models := &refModelRepo{byUID: map[string]domain.Model{
+		"ecs":  {ID: 1, UID: "ecs"},
+		"disk": {ID: 2, UID: "disk"},
+	}}
+	rels := &refRelationRepo{existing: map[string]bool{"zz_test_ecs_disk": true}}
+	svc := newRefService(models, rels)
+
+	_, err := svc.Create(context.Background(), validRelation())
+	if !errors.Is(err, errs.ErrRelationExists) {
+		t.Fatalf("期望 ErrRelationExists，实际 %v", err)
+	}
+	if len(rels.created) != 0 {
+		t.Fatalf("重复时不应落库")
+	}
+}
+
+// TestCreateRelationType_NilModelRepoSkipsCheck 保留旧装配路径（未注入模型仓储时不校验）。
+func TestCreateRelationType_NilModelRepoSkipsCheck(t *testing.T) {
+	rels := &refRelationRepo{}
+	svc := NewModelRelationTypeService(rels, nil, nil)
+
+	rel := validRelation()
+	rel.SourceModelUID = "zz_no_such"
+	rel.TargetModelUID = "zz_no_such_either"
+	if _, err := svc.Create(context.Background(), rel); err != nil {
+		t.Fatalf("nil modelRepo 时应跳过校验，实际 %v", err)
+	}
+}
+
+// TestCreateRelationType_PropagatesRepoError 模型仓储出错要向上传播，不能当成「模型不存在」。
+func TestCreateRelationType_PropagatesRepoError(t *testing.T) {
+	boom := errors.New("db down")
+	models := &refModelRepo{byUID: map[string]domain.Model{}, err: boom}
+	rels := &refRelationRepo{}
+	svc := newRefService(models, rels)
+
+	_, err := svc.Create(context.Background(), validRelation())
+	if err == nil || !strings.Contains(err.Error(), "db down") {
+		t.Fatalf("期望带上底层错误，实际 %v", err)
+	}
+	if errors.Is(err, errs.ErrRelationSourceModelNotFound) {
+		t.Fatalf("仓储故障不应被误判为「模型不存在」")
+	}
+}
+
+// 补齐接口方法（仓储接口比本测试用到的更多）。
+func (f *refModelRepo) Exists(_ context.Context, uid string) (bool, error) {
+	_, ok := f.byUID[uid]
+	return ok, nil
+}
+
+func (f *refRelationRepo) GetByID(_ context.Context, id int64) (domain.ModelRelationType, error) {
+	return domain.ModelRelationType{ID: id}, nil
+}
+
+// Update 必须与 Create 同一套裁剪 + 校验：
+// 否则 PUT /model-relations/:uid 传 "   " 就能把名称改成空白。
+func TestUpdateRelationType_RejectsBlankName(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{"ecs_disk": true}}
+	svc := newRefService(&refModelRepo{}, rels)
+
+	rel := validRelation()
+	rel.Name = "   "
+	if err := svc.Update(context.Background(), rel); !errors.Is(err, domain.ErrInvalidRelationName) {
+		t.Fatalf("期望 ErrInvalidRelationName，实际 %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("空白名称不应落库，实际写入 %+v", rels.updated)
+	}
+}
+
+func TestUpdateRelationType_TrimsBeforeWrite(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{"zz_rel_trim": true}}
+	svc := newRefService(modelsWith("ecs", "disk"), rels)
+
+	rel := validRelation()
+	rel.UID = "  zz_rel_trim  "
+	rel.Name = "  裁剪后的名称  "
+	rel.SourceModelUID = " ecs "
+	rel.TargetModelUID = " disk "
+	if err := svc.Update(context.Background(), rel); err != nil {
+		t.Fatalf("期望更新成功，实际 %v", err)
+	}
+	if len(rels.updated) != 1 {
+		t.Fatalf("期望写入 1 次，实际 %d", len(rels.updated))
+	}
+	got := rels.updated[0]
+	if got.UID != "zz_rel_trim" || got.Name != "裁剪后的名称" || got.SourceModelUID != "ecs" || got.TargetModelUID != "disk" {
+		t.Fatalf("落库值未裁剪：%+v", got)
+	}
+}
+
+// Update 必须与 Create 同一套引用校验，否则 PUT 能把合法类型改成指向已删除的模型。
+func TestUpdateRelationType_RejectsMissingModels(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{"ecs_disk": true}}
+	// 只存在 ecs，目标模型 disk 已删除
+	svc := newRefService(modelsWith("ecs"), rels)
+
+	rel := validRelation()
+	rel.UID = "ecs_disk"
+	if err := svc.Update(context.Background(), rel); !errors.Is(err, errs.ErrRelationTargetModelNotFound) {
+		t.Fatalf("期望 ErrRelationTargetModelNotFound，实际 %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("引用校验失败不应落库，实际写入 %+v", rels.updated)
+	}
+}
+
+func TestUpdateRelationType_UnknownUIDIsNotFound(t *testing.T) {
+	rels := &refRelationRepo{existing: map[string]bool{}}
+	svc := newRefService(&refModelRepo{}, rels)
+
+	if err := svc.Update(context.Background(), validRelation()); !errors.Is(err, errs.ErrRelationNotFound) {
+		t.Fatalf("期望 ErrRelationNotFound，实际 %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("不存在的关系类型不应落库")
+	}
+}
+
+// TestUpdateRelationType_LegacyDanglingRefStillEditable 回归（评审 R6，high）：
+// 存量脏数据 ecs_belong_to_vpc 的源模型 cloud_ecs 已被删除，而 UpdateModelRelationReq
+// 至今没有 SourceModelUID/TargetModelUID 字段。若 Update 无条件校验两侧引用，
+// 「只改描述」的 PUT 也会 400011 失败，且请求里没有任何字段能指向合法模型 ——
+// 这条关系类型就永久不可编辑。口径改为「只校验本次改动的边」。
+func TestUpdateRelationType_LegacyDanglingRefStillEditable(t *testing.T) {
+	legacy := domain.ModelRelationType{
+		ID:             1,
+		UID:            "ecs_belong_to_vpc",
+		Name:           "ECS属于VPC",
+		SourceModelUID: "cloud_ecs", // 该模型已不存在
+		TargetModelUID: "cloud_vpc",
+	}
+	rels := &refRelationRepo{
+		existing: map[string]bool{"ecs_belong_to_vpc": true},
+		stored:   &legacy,
+	}
+	// 只存在 cloud_vpc；cloud_ecs 已删除
+	svc := newRefService(modelsWith("cloud_vpc"), rels)
+
+	want := legacy
+	want.Description = "补充说明"
+	if err := svc.Update(context.Background(), want); err != nil {
+		t.Fatalf("引用未改动的历史脏数据应可编辑描述，实际 err = %v", err)
+	}
+	if len(rels.updated) != 1 || rels.updated[0].Description != "补充说明" {
+		t.Fatalf("应写入 1 条更新，实际 %+v", rels.updated)
+	}
+}
+
+// TestUpdateRelationType_RejectsChangedDanglingRef 反向约束：
+// 一旦本次改动把某一侧指向不存在的模型，仍必须拦住（只放宽未改动的边）。
+func TestUpdateRelationType_RejectsChangedDanglingRef(t *testing.T) {
+	origin := domain.ModelRelationType{
+		ID:             1,
+		UID:            "ecs_disk",
+		Name:           "云服务器挂载云盘",
+		SourceModelUID: "ecs",
+		TargetModelUID: "disk",
+	}
+	rels := &refRelationRepo{
+		existing: map[string]bool{"ecs_disk": true},
+		stored:   &origin,
+	}
+	svc := newRefService(modelsWith("ecs"), rels)
+
+	changed := origin
+	changed.TargetModelUID = "zz_no_such_target"
+	err := svc.Update(context.Background(), changed)
+	if !errors.Is(err, errs.ErrRelationTargetModelNotFound) {
+		t.Fatalf("改动后的目标模型不存在应被拒绝，实际 err = %v", err)
+	}
+	if len(rels.updated) != 0 {
+		t.Fatalf("校验失败不应写入，实际 %d 条", len(rels.updated))
+	}
+}

@@ -19,8 +19,10 @@ func TestInstanceRelationErrorResult(t *testing.T) {
 		if !ok {
 			t.Fatal("ErrRelationExists 应被识别为业务错误")
 		}
-		if result.Code != errs.ParamsError.Code {
-			t.Fatalf("code = %d, want %d", result.Code, errs.ParamsError.Code)
+		// 用 409 冲突语义码，与 modelRelationTypeErrorResult 的「已存在」口径一致：
+		// 同一种「已存在」若在两个入口返回不同 code，前端按 code 判定时会分叉。
+		if result.Code != errs.RelationExists.Code {
+			t.Fatalf("code = %d, want %d", result.Code, errs.RelationExists.Code)
 		}
 		if !strings.Contains(result.Msg, "已存在") {
 			t.Fatalf("提示应说明关系已存在，实际 %q", result.Msg)

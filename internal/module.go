@@ -67,8 +67,11 @@ func InitModule(db *mongox.Mongo) *Module {
 	modelSvc := service.NewModelService(modelRepo, instanceRepo)
 	// relationSvc 注入 instanceRepo：用于从既有实例属性推导实例关系
 	relationSvc := service.NewRelationService(relationRepo, instanceRepo)
-	// instRelRepo：删除模型关系类型前统计在用资产关系（跨租户），用于删除保护
-	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo, relationRepo)
+	// modelRelSvc：
+	//   - relationRepo 用于删除保护——删除模型关系类型前统计仍在使用该类型的资产关系（跨租户）；
+	//   - modelRepo 用于创建/更新关系类型时校验 source/target 模型确实存在，
+	//     避免造出「引用不存在模型」的关系类型（实例关系页选中后候选恒为 0）。
+	modelRelSvc := service.NewModelRelationTypeService(modelRelRepo, relationRepo, modelRepo)
 	topologySvc := service.NewTopologyService(instanceRepo, relationRepo, modelRepo, modelRelRepo)
 	modelGroupSvc := service.NewModelGroupService(modelGroupRepo, modelRepo)
 	// attributeSvc：instanceRepo 用于删除字段前统计「仍在使用该字段」的实例数（被使用则拒绝删除，
